@@ -1,0 +1,32 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+/Data - Cleansed/
+/Articles/
+/Bugs Data Function/
+/Writing/
+/Data/Hidden/
+/Code for Data Analysis Project/
+/Addressing Population Uncertainty and Undercounting/
+/Presentation/
+/code_for_submission_cache/
+/Results/
+/Population Adjustments/
+/BUGS vs Nimble/
+/instance_1/
+/instance_2/
+/instance_3/
+/instance_4/
+/BUGS vs Nimble/
+LE by Census Tract Notes.qmd
+LE-by-Census-Tract-Notes.pdf
+phila_spatial_pop.txt
+/ENAR/
+/Lit Review/
+plot_mcmc.R
+/ShinyApp/Data/Old/
+/References/
+/Old/
+/Data/ltdb_ct20toct10_xwalk_files/
+/Data/us.2006_2022.tract.level.pops.txt

@@ -1,0 +1,11 @@
+name: LE-Philadelphia
+title: LE-Philadelphia
+username:
+account: giannianfuso
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 8183724
+bundleId: 11059668
+url: https://giannianfuso.shinyapps.io/LE-Philadelphia/
+asMultiple: FALSE
+asStatic: FALSE
