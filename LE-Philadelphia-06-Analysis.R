@@ -1235,24 +1235,21 @@ le_plots_t1_order <- le_birth %>%
                    x = lci, xend = uci, col = years)) +
   theme_bw() +
   theme(
-    axis.text=element_text(color="black", size=20),
-    axis.title.x =element_text(color="black", size=20),
+    axis.text=element_text(color="black", size=25),
+    axis.title.x =element_text(color="black", size=25),
     axis.title.y =element_blank(),
-    strip.text=element_text(color="black", size=20),
+    strip.text=element_text(color="black", size=25),
     axis.text.y=element_blank(), 
     axis.ticks.y=element_blank(),
     legend.position = "bottom",
-    legend.text = element_text(size = 18),
-    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 25),
+    legend.title = element_text(size = 25),
     strip.placement = "outside") +
   facet_wrap(~gen, ncol = 2, scales="free_y") +
   scale_x_continuous(sec.axis = dup_axis(name = NULL),
                      breaks = round(seq(25, 100, by = 5))) +
   labs(x= "LE at Birth (Years)", col = "Years")
 le_plots_t1_order
-
-ggsave(filename = "./Results/Main Text/figure1_top.pdf", plot = le_plots_t1_order, 
-       device = "pdf", width = 15, height = 13)
 
 # Load LE change data
 load(file = "ShinyApp/Data/le_birth_change.Rdata")
@@ -1286,10 +1283,10 @@ le_change_plots <- le_birth_change %>%
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(
-    axis.text=element_text(color="black", size=20),
-    axis.title.x =element_text(color="black", size=20),
+    axis.text=element_text(color="black", size=25),
+    axis.title.x =element_text(color="black", size=25),
     axis.title.y =element_blank(),
-    strip.text=element_text(color="black", size=20),
+    strip.text=element_text(color="black", size=25),
     axis.text.y=element_blank(), 
     axis.ticks.y=element_blank(),
     strip.placement = "outside") +
@@ -1299,9 +1296,6 @@ le_change_plots <- le_birth_change %>%
                                         ceiling(max(le_birth_change$uci, na.rm = T)/5)*5, by = 5))) +
   labs(x= "Change in LE at Birth (Years)")
 le_change_plots
-
-ggsave(filename = "./Results/Main Text/figure1_change.pdf", plot = le_change_plots, 
-       device = "pdf", width = 15, height = 20)
 
 library(ggpubr)
 le_plots_combined <- ggarrange(le_plots_t1_order, le_change_plots, ncol = 1)
@@ -1491,8 +1485,10 @@ le_by_decile_plot_sii <- le_by_decile %>%
   theme(axis.text=element_text(color="black", size=15),
         axis.title =element_text(color="black", face="bold", size=20),
         strip.text=element_text(color="black", face="bold", size=20),
-        strip.background = element_blank(), legend.position = "bottom",
-        legend.text = element_text(size=18), legend.title = element_text(size=18)) + 
+        strip.background = element_blank(), 
+        legend.position = "bottom",
+        legend.text = element_text(size=18), 
+        legend.title = element_text(size=18)) + 
   facet_wrap(~gen)
 le_by_decile_plot_sii
 
