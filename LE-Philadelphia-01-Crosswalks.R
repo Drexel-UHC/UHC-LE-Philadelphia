@@ -4,20 +4,13 @@
 rm(list=ls())
 library(tidyverse)
 library(sf)
-library(data.table)
 
 
 # Shapefile/Paths/Crosswalks ----------------------------------------------
 
-# Create variable to house the directory path to create ease during import process
+# Create variable to house directory paths
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
-
-# Results path
-results <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UCH-LE-Philadelphia/Results/"
-
-# Onedirve Paths (replace with your own folder)
-# PATH FOR GIANNI'S COMPUTER:
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UCH-LE-Philadelphia/Data - Cleansed/"
+path_onedrive <- "Data - Cleansed/"
 
 # Philly shapefile - 2010 boundaries
 phila_sf <- read_sf(dsn = "Data/ct10_prcm20230419/CT10_PRCM20230419.shp") %>%
@@ -25,6 +18,7 @@ phila_sf <- read_sf(dsn = "Data/ct10_prcm20230419/CT10_PRCM20230419.shp") %>%
   rename(GEOID = GEOID10) %>%
   mutate(GEOID = as.numeric(GEOID)) %>%
   arrange(GEOID)
+
 
 # Save shapefile for later use
 save(phila_sf, file = paste0(path_onedrive, "phila_sf.Rdata"))
@@ -44,7 +38,7 @@ phila_tracts <- unique(phila_sf$GEOID)
 phila_tracts_2020 <- unique(phila_sf_2020$GEOID)
 
 # Load GEOID20-GEOID10 Crosswalk
-geoid_crosswalk <- fread("./Data/ltdb_ct20toct10_xwalk_files/ct20_ct10_xwalk.csv") %>%
+geoid_crosswalk <- read_csv("./Data/ltdb_ct20toct10_xwalk_files/ct20_ct10_xwalk.csv") %>%
   rename(GEOID20 = "TRTID2020", GEOID10 = "TRTID2010") %>%
   filter(GEOID20 %in% phila_tracts_2020 & GEOID10 %in% phila_tracts) %>%
   rename(WEIGHT = "TR20_TO_TR10_WEIGHT") %>%

@@ -99,5 +99,5 @@ decile_plots = function(le_by_decile, statistic, age, yrs){
       opts_toolbar(saveaspng = TRUE)
     )
   )
-  
+  return(gg)
 }

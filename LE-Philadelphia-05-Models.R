@@ -13,9 +13,10 @@ library(classInt)
 
 # Run Nimble Models -------------------------------------------------------
 
-# Create variable to house the directory path to create ease during import process
+# Create variable to house directory paths
+results <- "Results/"
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-LE-Philadelphia/Data - Cleansed/"
+path_onedrive <- "Data - Cleansed/"
 
 # Load data
 load(file = paste0(path_onedrive, "phila_sf.Rdata"))
@@ -234,7 +235,7 @@ lambda_convergence <- lambdas_nimble %>%
       ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
   })
 
-pdf(file = "./Results/lambda_convergence_20250729.pdf")
+pdf(file = paste0(working_results,"lambda_convergence_20250729.pdf"))
 lambda_convergence
 dev.off()
 

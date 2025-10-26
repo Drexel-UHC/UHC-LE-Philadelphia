@@ -3,18 +3,15 @@
 
 rm(list=ls())
 library(tidyverse)
-library(data.table)
 library(diagis)
 
-# Create variable to house the directory path to create ease during import process
+# Create variable to house directory paths
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
-
-# Results path
-results <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-LE-Philadelphia/Results/"
-
-# Onedirve Paths (replace with your own folder)
-# PATH FOR GIANNI'S COMPUTER:
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-LE-Philadelphia/Data - Cleansed/"
+results <- "Results/"
+working_results <- paste0(results, "Working Results/")
+main_text <- paste0(results, "Main Text/")
+appendix <- paste0(results, "Appendix/")
+path_onedrive <- "Data - Cleansed/"
 
 load(file = paste0(path_onedrive, "phila_sf.Rdata"))
 load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
@@ -31,8 +28,6 @@ age_limit <- 85
 
 # Death Data --------------------------------------------------------------
 
-#load(paste0(path_onedrive, "phila_pop_acs.rdata"))
-
 # Columns we need for death files
 keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", "geoid10",
                 "year", "Age_death", "DOD", "race1215", "RACE1215", 
@@ -42,7 +37,7 @@ keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", "geoid10",
 deaths <- data.frame()
 
 for(i in 2017:2022) {
-  current_data <- fread(paste0(dir_name, "deathgeo", i, ".csv")) %>%
+  current_data <- read_csv(paste0(dir_name, "deathgeo", i, ".csv")) %>%
     select(one_of(keep_death)) %>%
     mutate(year = i)
   
@@ -150,7 +145,7 @@ pa_age_at_death_geocoded_comp <- deaths_modified %>%
         strip.text=element_text(color="black", size=24))
 pa_age_at_death_geocoded_comp
 ggsave(pa_age_at_death_geocoded_comp, 
-       file = "./Results/Appendix/pa_age_at_death_geocoded_comp.pdf", width = 9, height = 10, units = "in")
+       file = paste0(appendix,"pa_age_at_death_geocoded_comp.pdf"), width = 9, height = 10, units = "in")
 
 # Death by years
 pa_death_counts_by_years <- deaths_modified %>%
@@ -193,7 +188,7 @@ pa_death_count_summary <- deaths_modified %>%
   arrange(Measure)
 
 # Save to CSV to use for Table 1
-write.csv(pa_death_count_summary, file = "./Results/pa_death_count_summary.csv", row.names = F)
+write.csv(pa_death_count_summary, file = paste0(working_results,"pa_death_count_summary.csv"), row.names = F)
 
 # Philadelphia Deaths -----------------------------------------------------
 
@@ -344,7 +339,7 @@ save(phila_death_counts, phila_death_counts_nolow, phila_death_counts_nolow_age_
      file = paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata"))
 
 
-# Demographics - Appendix Table -------------------------------------------
+# Appendix S4 -------------------------------------------------------------
 
 # Summary table for age at death in Philadelphia for table 1
 phila_age_at_death_summary <- phila_deaths_nolow %>% 
@@ -443,11 +438,11 @@ weighted_mhi_phila <- mhi %>%
   relocate(Measure)
 
 # Table 1
-table1 <- bind_rows(
+appendix_mort_summary <- bind_rows(
   phila_age_at_death_summary,
   phila_death_count_summary_sex,
   phila_death_count_summary_racehisp,
   weighted_mhi_phila
 )
 
-write.csv(table1, file = "./Results/Appendix/table1.csv", row.names = F)
+write.csv(appendix_mort_summary, file = paste0(appendix,"S4.csv"), row.names = F)

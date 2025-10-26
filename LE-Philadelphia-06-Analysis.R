@@ -21,8 +21,12 @@ library(tmap)
 library(RColorBrewer)
 library(ggpubr)
 
-# PATH FOR GIANNI'S COMPUTER (DREXEL)
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/LE-Philadelphia/Data - Cleansed/"
+# Create variable to house directory paths
+results <- "Results/"
+working_results <- paste0(results, "Working Results/")
+main_text <- paste0(results, "Main Text/")
+appendix <- paste0(results, "Appendix/")
+path_onedrive <- "Data - Cleansed/"
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
 
 # Load Data
@@ -39,6 +43,31 @@ load(file=paste0(path_onedrive,'phila_pop_seer.RData'))
 # All tracts in Philly
 phila_tracts <- unique(phila_sf$GEOID)
 phila_tracts_2020 <- unique(phila_sf_2020$GEOID)
+
+
+# Dataframes for Maps -----------------------------------------------------
+
+# Dataframe for maps of life expectancy at birth by census tract x sex x years
+le_birth <- filter(le_df_nimble, Age == 0) %>%
+  left_join(sex_years) %>%
+  full_join(phila_sf) %>%
+  select(GEOID, Age, lci, med, uci, geometry, sex, years, sex_years, sex_years_lab) %>%
+  ungroup() %>%
+  mutate(
+    med = case_when(
+      GEOID %in% low_pop ~ NA_real_,
+      TRUE ~ med),
+    lci = case_when(
+      GEOID %in% low_pop ~ NA_real_,
+      TRUE ~ lci),
+    uci = case_when(
+      GEOID %in% low_pop ~ NA_real_,
+      TRUE ~ uci),
+    jenks=cut(med, breaks=classIntervals(med,n=6,style="jenks")$brks,include.lowest=T))%>%
+  inner_join(tract_ids) %>%
+  arrange(sex_years, tract)
+
+save(le_birth, file = "ShinyApp/Data/le_birth.Rdata")
 
 
 # Summary -----------------------------------------------------------------
@@ -73,42 +102,10 @@ le_decrease <- le_birth_change %>%
   mutate(pct_decr = round(pct_decr*100,2))
 
 
-# Dataframes for Maps -----------------------------------------------------
-
-
-# Dataframe for maps of life expectancy at birth by census tract x sex x years
-le_birth <- filter(le_df_nimble, Age == 0) %>%
-  left_join(sex_years) %>%
-  full_join(phila_sf) %>%
-  select(GEOID, Age, lci, med, uci, geometry, sex, years, sex_years, sex_years_lab) %>%
-  ungroup() %>%
-  mutate(
-    med = case_when(
-      GEOID %in% low_pop ~ NA_real_,
-      TRUE ~ med),
-    lci = case_when(
-      GEOID %in% low_pop ~ NA_real_,
-      TRUE ~ lci),
-    uci = case_when(
-      GEOID %in% low_pop ~ NA_real_,
-      TRUE ~ uci),
-    jenks=cut(med, breaks=classIntervals(med,n=6,style="jenks")$brks,include.lowest=T))%>%
-  inner_join(tract_ids) %>%
-  arrange(sex_years, tract)
-
-save(le_birth, file = "ShinyApp/Data/le_birth.Rdata")
-
-
 # MHI ---------------------------------------------------------------------
 
 # Load 2020-2010 GEOID Crosswalk
 load(file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
-
-# Load ACS variables
-vars <- load_variables(2015, "acs5")
-vars_2017_2019 <- load_variables(2019, "acs5")
-vars_2020_2022 <- load_variables(2023, "acs5")
-vars_2020 <- load_variables(2020, "pl")
 
 #Pull mhi by tract
 mhi_1 <-  map_dfr(c(2019:2023), function(year_mhi){
@@ -513,7 +510,7 @@ summary_table <- abs_ineq_summary %>%
 save(summary_table, file = "ShinyApp/Data/summary_table.Rdata")
 
 # Write table to CSV
-write.csv(summary_table, "./Results/summary_table_20250117.csv", row.names = FALSE)
+write.csv(summary_table, paste0(working_results,"summary_table_20250117.csv"), row.names = FALSE)
 
 # Create table with CIs
 summary_time_disparities_table <- abs_ineq_time_disparities %>%
@@ -526,7 +523,7 @@ summary_time_disparities_table <- abs_ineq_time_disparities %>%
       RelDif = paste0(med_ratio_ratio, " (", lci_ratio_ratio, ", ", uci_ratio_ratio, ")"))
 
 # Write table to CSV
-write.csv(summary_time_disparities_table, "./Results/summary_time_disparities_table_20250117.csv", row.names = FALSE)
+write.csv(summary_time_disparities_table, paste0(working_results,"summary_time_disparities_table_20250117.csv"), row.names = FALSE)
 
 # Income-Based Disparities ------------------------------------------------
 
@@ -701,7 +698,7 @@ income_ineq_table <- income_ineq %>%
 save(income_ineq_table, file = "ShinyApp/Data/income_ineq_table.Rdata")
 
 # Write table to CSV
-write.csv(income_ineq_table, "./Results/income_ineq_table_20250117.csv", row.names = FALSE)
+write.csv(income_ineq_table, paste0(working_results,"income_ineq_table_20250117.csv"), row.names = FALSE)
 
 # Create table for change in LE with CIs
 income_ineq_table_change <- income_ineq_change %>%
@@ -757,7 +754,7 @@ income_time_disparities_table <- income_time_disparities %>%
     RelDif_RII = paste0(med_ratio_rii, " (", lci_ratio_rii, ", ", uci_ratio_rii, ")"))
 
 # Write table to CSV
-write.csv(income_time_disparities_table, "./Results/income_time_disparities_table_20250117.csv", row.names = FALSE)
+write.csv(income_time_disparities_table, paste0(working_results,"income_time_disparities_table_20250117.csv"), row.names = FALSE)
 
 # Save as R object
 save(income_time_disparities_table, file = "ShinyApp/Data/income_time_disparities_table_20250117.Rdata")
@@ -904,7 +901,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
     p
   })
 
-pdf(file = "./Results/rates_plot_ribbon_20250117.pdf")
+pdf(file = paste0(working_results,"rates_plot_ribbon_20250117.pdf"))
 rates_plot_ribbon
 dev.off()
 
@@ -935,11 +932,11 @@ rates_42101001102 <- lambdas_med_ci %>%
         axis.text = element_text(size=24))
 rates_42101001102
 
-pdf(file = "./Results/rates_42101001102.pdf", width = 9, height = 9)
+pdf(file = paste0(working_results,"rates_42101001102.pdf"), width = 9, height = 9)
 rates_42101001102
 dev.off()
 
-png(file = "./Results/rates_42101001102.png")
+png(file = paste0(working_results,"rates_42101001102.png"))
 rates_42101001102
 dev.off()
 
@@ -957,7 +954,7 @@ decile_by_racehisp <- inner_join(pop_hisp, pop_nhb, by = c("GEOID", "years", "To
   arrange(years, decile_income)
 
 #Write table to CSV
-write.csv(decile_by_racehisp, "./Results/decile_by_racehisp_20240206.csv", row.names = FALSE)
+write.csv(decile_by_racehisp, paste0(working_results,"decile_by_racehisp_20240206.csv"), row.names = FALSE)
 
 decile_by_racehisp_long <- decile_by_racehisp %>%
   pivot_longer(cols = c("pct_hisp", "pct_nhb"), names_to = "racehisp", values_to = "pct") %>%
@@ -987,10 +984,10 @@ decile_by_racehisp_plot <- decile_by_racehisp_long %>%
   facet_wrap(~years)
 decile_by_racehisp_plot
 
-ggsave(filename = "./Results/decile_by_racehisp_plot_20240206.pdf", plot = decile_by_racehisp_plot, 
+ggsave(filename = paste0(working_results,"decile_by_racehisp_plot_20240206.pdf"), plot = decile_by_racehisp_plot, 
        device = "pdf", width = 14, height = 10)
 
-ggsave(filename = "./Results/decile_by_racehisp_plot_20240206.png", plot = decile_by_racehisp_plot, 
+ggsave(filename = paste0(working_results, "decile_by_racehisp_plot_20240206.png"), plot = decile_by_racehisp_plot, 
        device = "png", width = 15, height = 10)
 
 
@@ -1014,7 +1011,7 @@ boxplots_le <- ggplot(le_birth) +
   guides(color=guide_legend(title="Sex"))
 boxplots_le
 
-ggsave(filename = "./Results/boxplots_le_20250117.png", plot = boxplots_le, 
+ggsave(filename = paste0(working_results,"boxplots_le_20250117.png"), plot = boxplots_le, 
        device = "png", width = 15, height = 10)
 
 
@@ -1064,9 +1061,6 @@ mhi_scatter_plot
 
 
 # Population Demographic Maps ---------------------------------------------
-
-# Load ACS variables
-vars<-load_variables(2015, "acs5", cache = TRUE) %>% rename(variable = name)
 
 # Pull data on % of each tract that is Hispanic
 pop_hisp <- get_acs(geography = "tract", year = 2015, state = 42, 
@@ -1186,7 +1180,7 @@ table1 <- rbind(table1_averageLE,
                 table1_total, 
                 table1_income)
 
-write.csv(table1, "./Results/Main Text/table1.csv", row.names = FALSE)
+write.csv(table1, paste0(main_text,"table1.csv"), row.names = FALSE)
 
 table1_income_sensitivity <- income_ineq_table_sensitivity %>%
   filter(Age == 0) %>%
@@ -1300,9 +1294,9 @@ le_change_plots
 library(ggpubr)
 le_plots_combined <- ggarrange(le_plots_t1_order, le_change_plots, ncol = 1)
 
-ggsave(filename = "./Results/Main Text/figure1.pdf", plot = le_plots_combined, 
+ggsave(filename = paste0(main_text,"figure1.pdf"), plot = le_plots_combined, 
        device = "pdf", width = 16, height = 20)
-ggsave(filename = "./Results/Main Text/figure1.png", plot = le_plots_combined, 
+ggsave(filename = paste0(main_text,"figure1.png"), plot = le_plots_combined, 
        device = "png", width = 16, height = 18, dpi = 600)
 
 # Figure 2 - Maps of LE at Birth ------------------------------------------
@@ -1355,9 +1349,9 @@ le_maps <- tmap_arrange(le_maps_list, ncol = 2, outer.margins = 0.02, widths = c
 le_maps
 
 # Save as pdf
-tmap_save(le_maps, filename = "./Results/Main Text/figure2.pdf", 
+tmap_save(le_maps, filename = paste0(main_text,"figure2.pdf"), 
           width = 14, height = 14, dpi = 600)
-tmap_save(le_maps, filename = "./Results/Main Text/figure2.png",
+tmap_save(le_maps, filename = paste0(main_text,"figure2.png"),
           width = 14, height = 14, units = "in", dpi = 600)
 
 
@@ -1449,9 +1443,9 @@ le_change_post_prob_maps_list <- c(le_change_maps_list, post_prob_maps_list)[c(1
 le_change_post_prob_maps <- tmap_arrange(le_change_post_prob_maps_list, 
                                          ncol = 2, nrow = 2, outer.margins = 0.02)
 le_change_post_prob_maps
-tmap_save(le_change_post_prob_maps, filename = "./Results/Main Text/figure3.pdf", 
+tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.pdf"), 
           width = 14, height = 14, dpi = 600)
-tmap_save(le_change_post_prob_maps, filename = "./Results/Main Text/figure3.png",
+tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.png"),
           width = 14, height = 14, units = "in", dpi = 600)
 
 
@@ -1547,9 +1541,9 @@ le_change_by_decile_plot
 le_by_decile_plot_stacked <- ggarrange(le_by_decile_plot_sii, le_change_by_decile_plot, ncol = 1)
 
 # Save plots
-ggsave(filename = "./Results/Main Text/figure4.pdf", plot = le_by_decile_plot_stacked, 
+ggsave(filename = paste0(main_text,"figure4.pdf"), plot = le_by_decile_plot_stacked, 
        device = "pdf", width = 10, height = 12, dpi = 600)
-ggsave(filename = "./Results/Main Text/figure4.png", plot = le_by_decile_plot_stacked, 
+ggsave(filename = paste0(main_text,"figure4.png"), plot = le_by_decile_plot_stacked, 
        device = "png", width = 10, height = 11, dpi = 600)
 
 
@@ -1594,8 +1588,8 @@ mhi_maps <- tmap_arrange(mhi_maps_list, ncol = 2, outer.margins = 0.02, widths =
 mhi_maps
 
 # Save as pdf and png
-tmap_save(mhi_maps, filename = "./Results/Appendix/S6.pdf", width = 14, height = 8, dpi = 600)
-tmap_save(mhi_maps, filename = "./Results/Appendix/S6.png", width = 14, height = 8, dpi = 600)
+tmap_save(mhi_maps, filename = paste0(appendix,"S6.pdf"), width = 14, height = 8, dpi = 600)
+tmap_save(mhi_maps, filename = paste0(appendix,"S6.png"), width = 14, height = 8, dpi = 600)
 
 
 # Appendix S6 - LE/Change in LE by MHI Decile (Sensitivity) ---------------
@@ -1628,8 +1622,8 @@ le_change_by_decile_plot_sensitivity
 le_by_decile_plot_stacked_sensitivity <- ggarrange(le_by_decile_plot_sii_sensitivity, le_change_by_decile_plot_sensitivity, ncol = 1)
 
 # Save plots
-ggsave(filename = "./Results/Appendix/S6.pdf", plot = le_by_decile_plot_stacked_sensitivity, 
+ggsave(filename = paste0(appendix,"S6.pdf"), plot = le_by_decile_plot_stacked_sensitivity, 
        device = "pdf", width = 10, height = 12, dpi = 600)
-ggsave(filename = "./Results/Appendix/S6.png", plot = le_by_decile_plot_stacked_sensitivity, 
+ggsave(filename = paste0(appendix,"S6.png"), plot = le_by_decile_plot_stacked_sensitivity, 
        device = "png", width = 10, height = 12, dpi = 600)
 

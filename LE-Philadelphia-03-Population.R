@@ -4,9 +4,12 @@
 rm(list=ls())
 library(tidyverse)
 
-# Onedirve Paths (replace with your own folder)
-# PATH FOR GIANNI'S COMPUTER:
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-Philadelphia/Data - Cleansed/"
+# Create variable to house directory paths
+results <- "Results/"
+working_results <- paste0(results, "Working Results/")
+main_text <- paste0(results, "Main Text/")
+appendix <- paste0(results, "Appendix/")
+path_onedrive <- "Data - Cleansed/"
 
 # Load relevant crosswalks
 load(file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
@@ -48,8 +51,9 @@ phila_pop_age_sex <- function(df) {
 # Load SEER population estimates 
 load(paste0(path_onedrive, "pop_tract_philly.Rdata"))
 dta_us_age_grp_5 <- fread("./Data/us.2006_2022.tract.level.pops.txt")
-colnames(dta_us_age_grp_5) <- "data"
-phila_pop_age_grp_seer_1 <- dta_us_age_grp_5 %>%
+
+phila_pop_age_grp_seer <- read_lines("./Data/us.2006_2022.tract.level.pops.txt") %>%
+  enframe(name = NULL, value = "data") %>%
   mutate(state = substr(data, 5, 6)) %>%
   filter(state == "PA") %>%
   mutate(
@@ -92,10 +96,7 @@ phila_pop_age_grp_seer_1 <- dta_us_age_grp_5 %>%
       age == 17 ~ 80,
       age == 18 ~ 85
     )) %>%
-  select(-age)
-
-# Fill out all combinations of tract x age group x sex for 2017-2019
-phila_pop_age_grp_seer <- phila_pop_age_grp_seer_1 %>%
+  select(-age) %>%
   full_join(phila_tracts_age_grp_5_sexes_years) %>%
   complete(GEOID, age_grp_5, years, sex, fill = list(pop = 0)) %>%
   filter(!is.na(pop), !is.na(age_grp_5)) %>%
@@ -270,7 +271,7 @@ phila_pop_seer_no_pop_maps <- inner_join(phila_pop_seer_total_all_fixes, phila_s
   theme(legend.position = "bottom")
 phila_pop_seer_no_pop_maps
 
-ggsave(filename = "./Results/phila_pop_seer_no_pop_maps.png", plot = phila_pop_seer_no_pop_maps, 
+ggsave(filename = paste0(working_results,"phila_pop_seer_no_pop_maps.png"), plot = phila_pop_seer_no_pop_maps, 
        device = "png", width = 15, height = 13)
 
 save(phila_pop_age_grp_seer, phila_pop_age_seer, 
