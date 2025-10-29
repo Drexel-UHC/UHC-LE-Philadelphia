@@ -1,0 +1,13 @@
+name: ShinyApp
+title: ShinyApp
+username:
+account: giannianfuso
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6230715
+bundleId: 6179612
+url: https://giannianfuso.shinyapps.io/shinyapp/
+when: 1659966398.97155
+lastSyncTime: 1659966398.97156
+asMultiple: FALSE
+asStatic: FALSE
