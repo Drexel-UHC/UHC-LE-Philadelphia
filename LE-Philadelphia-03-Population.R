@@ -3,6 +3,7 @@
 
 rm(list=ls())
 library(tidyverse)
+library(demotools)
 
 # Create variable to house directory paths
 results <- "Results/"
@@ -19,6 +20,7 @@ load(file = paste0(path_onedrive, "phila_sf.Rdata"))
 load(file = paste0(path_onedrive, "phila_sf_cross.Rdata"))
 load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
 
+# All tracts in Philly
 phila_tracts <- phila_sf$GEOID %>% unique
 N_tracts <- length(phila_tracts)
 
@@ -27,6 +29,7 @@ age_limit<-85
 
 # All ages to be included in analysis
 ages <- seq(from = 0, to = age_limit, by = 1)
+
 
 # SEER Population --------------------------------------------------------------
 
@@ -52,6 +55,7 @@ phila_pop_age_sex <- function(df) {
 load(paste0(path_onedrive, "pop_tract_philly.Rdata"))
 dta_us_age_grp_5 <- fread("./Data/us.2006_2022.tract.level.pops.txt")
 
+# SEER population by sex x tract x age group
 phila_pop_age_grp_seer <- read_lines("./Data/us.2006_2022.tract.level.pops.txt") %>%
   enframe(name = NULL, value = "data") %>%
   mutate(state = substr(data, 5, 6)) %>%
@@ -117,6 +121,7 @@ sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # 54,689.67
 # Total SEER population by age group in tracts to be included
 sum(phila_pop_age_grp_seer$pop) - sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # 9,510,818
 
+# Remove data and free up memory
 rm(dta_us_age_grp_5); gc()
 
 # SEER population by single-year age group
@@ -271,13 +276,14 @@ phila_pop_seer_no_pop_maps <- inner_join(phila_pop_seer_total_all_fixes, phila_s
   theme(legend.position = "bottom")
 phila_pop_seer_no_pop_maps
 
+# Save map
 ggsave(filename = paste0(working_results,"phila_pop_seer_no_pop_maps.png"), plot = phila_pop_seer_no_pop_maps, 
        device = "png", width = 15, height = 13)
 
+# Save cleaned up population data
 save(phila_pop_age_grp_seer, phila_pop_age_seer, 
      phila_pop_seer_total, phila_pop_seer_age_grp_no_low, 
      phila_pop_age_grp_seer_all_fixes, phila_pop_seer_total_all_fixes,
      phila_pop_age_seer_all_fixes, phila_pop_seer_tract_sex_total_all_fixes, 
      phila_pop_seer_total_all_fixes,
      file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-

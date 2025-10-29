@@ -13,6 +13,7 @@ main_text <- paste0(results, "Main Text/")
 appendix <- paste0(results, "Appendix/")
 path_onedrive <- "Data - Cleansed/"
 
+# Load data created in crosswalks script
 load(file = paste0(path_onedrive, "phila_sf.Rdata"))
 load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
 load(file = paste0(path_onedrive, "years_cross.Rdata"))
@@ -25,6 +26,7 @@ N_tracts <- length(phila_tracts)
 
 # Age limit for age at death
 age_limit <- 85
+
 
 # Death Data --------------------------------------------------------------
 
@@ -82,11 +84,11 @@ death_demographics <- function(df) {
         SEX == 9 ~ "Unknown"
       ),
       RACE = case_when(
-        race1215 == 01 ~ 1, #White race9011 == 1 (for older years)
-        race1215 == 02 ~ 2, #Black race9011 == 2 | (for older years)
-        race1215 == 03 ~ 3, #American Indian Alaska Native race9011 == 3 | (for older years)
-        race1215 >= 04 & race1215 <= 14 ~ 4, #AAPI ((race9011 >= 4 & race9011 <= 8) | race9011 == 0) | (for older years)
-        is.na(race1215) | race1215>= 15 ~ 5) %>% #Other race9011 == 9 | is.na(race9011) | (for older years)
+        RACE1215 == 01 ~ 1, #White race9011 == 1 (for older years)
+        RACE1215 == 02 ~ 2, #Black race9011 == 2 | (for older years)
+        RACE1215 == 03 ~ 3, #American Indian Alaska Native race9011 == 3 | (for older years)
+        RACE1215 >= 04 & RACE1215 <= 14 ~ 4, #AAPI ((race9011 >= 4 & race9011 <= 8) | race9011 == 0) | (for older years)
+        is.na(RACE1215) | RACE1215>= 15 ~ 5) %>% #Other race9011 == 9 | is.na(race9011) | (for older years)
         factor(
           levels = c(1,2,3,4,5),
           labels = c("White", "Black", 
@@ -130,22 +132,6 @@ deaths_modified %>% filter(year <= 2019, is.na(Age_death)) %>% nrow() / nrow(dea
 deaths_modified %>% 
   filter(year <= 2019, substr(GEOID, 1, 5) == 42101, nchar(as.numeric(GEOID)) < 11) %>% 
   nrow() / nrow(deaths_modified %>% filter(year <= 2019, substr(GEOID, 1, 5) == 42101)) * 100
-
-# Compare deaths by age for geocoded vs not geocoded deaths
-pa_age_at_death_geocoded_comp <- deaths_modified %>%
-  ggplot(aes(x = Age_death)) +
-  geom_histogram(binwidth = 5, fill = "lightblue", color = "black") +
-  facet_wrap(~GEOCODED, scales = "free_y", ncol = 1) +
-  labs(title = "Age at Death for Geocoded and Non-Geocoded Deaths in PA",
-       x = "Age at Death",
-       y = "Number of Deaths") + 
-  theme_bw() + 
-  theme(axis.text=element_text(color="black", size=24),
-        axis.title =element_text(color="black", size=24),
-        strip.text=element_text(color="black", size=24))
-pa_age_at_death_geocoded_comp
-ggsave(pa_age_at_death_geocoded_comp, 
-       file = paste0(appendix,"pa_age_at_death_geocoded_comp.pdf"), width = 9, height = 10, units = "in")
 
 # Death by years
 pa_death_counts_by_years <- deaths_modified %>%
@@ -192,6 +178,7 @@ write.csv(pa_death_count_summary, file = paste0(working_results,"pa_death_count_
 
 # Philadelphia Deaths -----------------------------------------------------
 
+# Philly deaths by tract x sex x age group
 phila_deaths <- deaths %>%
   filter(GEOID %in% phila_tracts) %>%
   mutate(
@@ -216,6 +203,11 @@ phila_deaths_nolow <- phila_deaths %>%
   filter(!(GEOID %in% low_pop))
 nrow(phila_deaths_nolow)
 
+# Save data (to encrypted drive)
+save(phila_deaths, 
+     phila_deaths_nolow, 
+     file = paste0(dir_name, "Philly LE\\", "phila_deaths.Rdata"))
+
 # Philadelphia deaths with demographic information
 phila_deaths_modified <- deaths_modified %>%
   filter(GEOID %in% phila_tracts) %>%
@@ -223,10 +215,6 @@ phila_deaths_modified <- deaths_modified %>%
     years = case_when(
       year >= 2017 & year <= 2019 ~ "2017-2019",
       year >= 2020 & year <= 2022 ~ "2020-2022"),
-    # sex = case_when(
-    #   SEX == 1 ~ "Male",
-    #   SEX == 2 ~ "Female",
-    #   SEX == 9 ~ "Unknown"),
     age = case_when(
       floor(Age_death) >= age_limit ~ age_limit,
       floor(Age_death) < age_limit ~ floor(Age_death)),
@@ -257,7 +245,6 @@ nrow(filter(phila_deaths_nolow_modified, is.na(age))) / nrow(phila_deaths_nolow_
 
 # Summary info for age at death
 summary(phila_deaths_nolow$Age_death)
-tapply(phila_deaths_nolow$Age_death, phila_deaths_nolow$sex * phila_deaths_nolow$years, FUN = summary)
 
 # Philly death counts - exclude entries missing information for sex and age
 phila_death_counts <- phila_deaths %>%
@@ -334,115 +321,9 @@ philadelphia_total <- nrow(phila_deaths)
 philadelphia_nogeo_pct <- philadelphia_nogeo/philadelphia_total*100
 philadelphia_geo_pct <- 100 - philadelphia_nogeo_pct
 
-# Save data
-save(phila_death_counts, phila_death_counts_nolow, phila_death_counts_nolow_age_grp, 
+# Save data (to encrypted drive)
+save(phila_death_counts, 
+     phila_death_counts_nolow, 
+     phila_death_count_nolow_unknown,
+     phila_death_counts_nolow_age_grp, 
      file = paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata"))
-
-
-# Appendix S4 -------------------------------------------------------------
-
-# Summary table for age at death in Philadelphia for table 1
-phila_age_at_death_summary <- phila_deaths_nolow %>% 
-  #filter(sex != "Unknown") %>%
-  group_by(years) %>%
-  summarise(mean = round(mean(Age_death, na.rm = TRUE), 2), 
-            sd = round(sd(Age_death, na.rm = TRUE), 2)) %>%
-  mutate(sex = "  Total") %>%
-  bind_rows(
-    phila_deaths_nolow %>% 
-      #filter(sex != "Unknown") %>%
-      group_by(years, sex) %>%
-      summarise(mean = round(mean(Age_death, na.rm = TRUE), 2), 
-                sd = round(sd(Age_death, na.rm = TRUE), 2)) %>%
-      mutate(sex=paste0("    ", sex))
-  ) %>%
-  mutate(mean_sd = paste0(mean, " (", sd, ")")) %>%
-  pivot_wider(names_from = years, values_from = mean_sd, values_fill = "") %>%
-  select(-c(mean, sd)) %>%
-  group_by(sex) %>%
-  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
-  bind_rows(c(sex = "Average age at death (SD)", "2017-2019" = "", "2020-2022" = ""),
-            c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")) %>%
-  rename("Measure" = sex) %>%
-  mutate(Measure = factor(Measure, 
-                          levels = c("Average age at death (SD)", "  Total", "  Sex", "    Female", "    Male", "    Unknown"))) %>%
-  arrange(Measure)
-
-# Summary table of deaths in Philly by year and sex
-phila_death_count_summary_sex <- phila_death_count_nolow_unknown %>%
-  group_by(years, sex) %>%
-  summarise(deaths=sum(deaths)) %>%
-  group_by(years) %>%
-  mutate(total=sum(deaths), pct=round(deaths/total*100,2),
-         deaths_chr=format(deaths, big.mark=",",scientific=FALSE),
-         sex=paste0("    ", sex)) %>%
-  bind_rows(
-    phila_death_count_nolow_unknown %>%
-      group_by(years) %>%
-      summarise(deaths=sum(deaths), total = sum(deaths)) %>%
-      mutate(sex="  Total", pct=round(deaths/total*100,2),
-             deaths_chr=format(deaths, big.mark=",",scientific=FALSE))
-  ) %>%
-  mutate(deaths_pct = paste0(deaths_chr, " (", pct, "%)")) %>%
-  pivot_wider(names_from = years, values_from = deaths_pct, values_fill = "") %>%
-  select(-c(deaths, pct)) %>%
-  group_by(sex) %>%
-  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
-  bind_rows(c(sex = "Number of deaths (%)", "2017-2019" = "", "2020-2022" = ""),
-            c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")) %>%
-  rename("Measure" = sex) %>%
-  mutate(Measure = factor(Measure, 
-                          levels = c("Number of deaths (%)", "  Total", "  Sex", "    Female", "    Male", "    Unknown"))) %>%
-  arrange(Measure)
-
-# Summary table of race-ethnicity of Philly deaths for Table 1
-phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
-  filter(!is.na(age)) %>% 
-  group_by(years, RACEHISP) %>%
-  summarise(deaths=n()) %>%
-  group_by(years) %>%
-  mutate(total=sum(deaths),
-         deaths_chr=format(deaths, big.mark=",",scientific=FALSE), 
-         pct = round(deaths/total*100,2),
-         deaths_pct = paste0(deaths_chr, " (", pct, "%)"),
-         RACEHISP = paste0("    ", RACEHISP)) %>%
-  pivot_wider(names_from = years, values_from = deaths_pct, values_fill = "") %>%
-  select(-c(deaths, pct)) %>%
-  group_by(RACEHISP) %>%
-  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
-  rename("Measure" = RACEHISP) %>%
-  bind_rows(c(Measure = "  Racial-ethnic group", "2017-2019" = "", "2020-2022" = "")) %>%
-  mutate(Measure = factor(Measure,
-                          levels = c("  Racial-ethnic group", "    Hispanic",  "    Non-Hispanic American Indian, Alaska Native",
-                                     "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
-                                     "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"))) %>%
-  arrange(Measure)
-
-# Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
-load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(file = paste0(path_onedrive, "mhi.Rdata"))
-
-#Get average and sd of mhi for Philadelphia
-weighted_mhi_phila <- mhi %>%
-  inner_join(phila_pop_seer_total_all_fixes) %>%
-  group_by(years) %>%
-  summarise(mean = round(mean(mhi, na.rm = TRUE), 2), wtd.mean = round(weighted_mean(mhi, w=pop, na.rm = T),2),
-            sd = round(sd(mhi, na.rm = TRUE), 2), wtd.sd = round(sqrt(weighted_var(mhi, w=pop, na.rm = T)),2)) %>%
-  mutate(wtd_mean_chr = format(wtd.mean, big.mark=",",scientific=FALSE), 
-         wtd_sd_chr = format(wtd.sd, big.mark=",",scientific=FALSE),
-         wtd_mean_sd = paste0("$", wtd_mean_chr, " (", wtd_sd_chr, ")")) %>%
-  pivot_wider(names_from = years, values_from = wtd_mean_sd, values_fill = "") %>%
-  select(-c(mean, wtd.mean, sd, wtd.sd, wtd_mean_chr, wtd_sd_chr)) %>%
-  summarise_all(~paste(., collapse = "")) %>%
-  mutate("Measure" = "Population-weighted MHI (SD)") %>%
-  relocate(Measure)
-
-# Table 1
-appendix_mort_summary <- bind_rows(
-  phila_age_at_death_summary,
-  phila_death_count_summary_sex,
-  phila_death_count_summary_racehisp,
-  weighted_mhi_phila
-)
-
-write.csv(appendix_mort_summary, file = paste0(appendix,"S4.csv"), row.names = F)

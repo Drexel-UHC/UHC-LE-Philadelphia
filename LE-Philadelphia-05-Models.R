@@ -1,5 +1,5 @@
 
-# Load Libraries ----------------------------------------------------------
+# Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
 library(tidyverse)
@@ -10,8 +10,6 @@ library(future)
 library(furrr)
 library(nimble)
 library(classInt)
-
-# Run Nimble Models -------------------------------------------------------
 
 # Create variable to house directory paths
 results <- "Results/"
@@ -27,6 +25,9 @@ load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
 # Age groups for model
 age_limit<-85
 ages <- seq(from = 0, to = age_limit, by = 1)
+
+
+# Run Nimble Models -------------------------------------------------------
 
 # Start parallel processing 
 plan(multisession, .cleanup = T, workers = 4); gc()
@@ -149,22 +150,19 @@ nimble_results_seer <- future_map(c(1,2,3,4), function(sex_years_var, .options=f
 nimble_end <- Sys.time()
 
 # Print time to run nimble models
-cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \n')
-
-# Nimble models took  2.264729  hours to run.
+cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \n') # Nimble models took  2.264729  hours to run.
 
 # End parallel processing
 plan(sequential)
 
-# Save results
+# Save results for later use
 save(nimble_results_seer, file=paste0(path_onedrive, "nimble_results_seer_20250117.Rdata"))
 
 
 # Lambdas ----------------------------------------------------------------
 
-# Load nimble results and other data
+# Load nimble results created above, and mortality rates created in 03-Mortality Rates
 load(file=paste0(path_onedrive, "nimble_results_seer_20250117.Rdata"))
-load(file = paste0(path_onedrive,'sex_years.Rdata'))
 load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
 
 # Extract lambdas by iteration
@@ -216,14 +214,16 @@ thetas_med_ci <- lambdas_nimble %>%
   ungroup() %>%
   mutate(fisher=cut(round(exp(med)*100000), breaks=classIntervals(round(exp(med)*100000),n=6,style="fisher")$brks,include.lowest=T, dig.lab = 10))
 
-# Free unused memory and save results
+# Free unused memory and save results for later use
 gc(); save(thetas_med_ci, file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'))
+
 
 # Model Convergence -------------------------------------------------------
 
-load(file=paste0(path_onedrive, "nimble_results_seer_20250117.Rdata"))
+# Load lambdas created above
 load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata'))
 
+# Trace plots
 lambda_convergence <- lambdas_nimble %>%
   filter(age %in% c(0, 5, 10, 20, 30, 45, 70, 75, 85)) %>% # Don't need to look at all ages -- just take sample of knots and betwee-knots
   group_by(GEOID, age) %>%
@@ -235,10 +235,12 @@ lambda_convergence <- lambdas_nimble %>%
       ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
   })
 
-pdf(file = paste0(working_results,"lambda_convergence_20250729.pdf"))
+# Save as PDF
+pdf(file = paste0(working_results,"lambda_convergence_20251028.pdf"))
 lambda_convergence
 dev.off()
 
+# Density plots
 lambda_density <- lambdas_nimble %>%
   filter(age %in% c(0, 20, 40, 70)) %>%
   group_by(GEOID, age) %>%
@@ -250,9 +252,10 @@ lambda_density <- lambdas_nimble %>%
       ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
   })
 
+
 # Life Expectancy ---------------------------------------------------------
 
-# Load lambdas
+# Load lambdas created above
 load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
 
 # Start time of lifetable calcs
@@ -273,10 +276,9 @@ le_nimble  <- lambdas_nimble %>%
 le_end <- Sys.time()
 
 # Print time to run lifetables
-cat("Nimble models took ", difftime(le_end, le_start), ' hours to run. \n')
-# Time difference of 13.26059 hours
+cat("Nimble models took ", difftime(le_end, le_start), ' hours to run. \n') # Time difference of 13.26059 hours
 
-# Free unused memory and save results
+# Free unused memory and save results for later use
 gc(); save(le_nimble,file=paste0(path_onedrive, "le_nimble_20250117.Rdata"))
 
 # Dataframe of LE by iteration
@@ -287,7 +289,7 @@ le_iter_nimble <- tibble(do.call(rbind,le_nimble)) %>%
   mutate(GEOID = as.numeric(GEOID)) %>%
   filter((Age==0)|(Age==25)|(Age==65))
 
-# Free unused memory and save results
+# Free unused memory and save results for later use
 gc(); save(le_iter_nimble,file=paste0(path_onedrive, "le_iter_nimble_20250117.Rdata"))
 
 # Point estimates and 95% CIs for LE
@@ -298,5 +300,5 @@ le_df_nimble <- le_iter_nimble %>%
             med = quantile(le, probs = c(.5), na.rm = TRUE),
             uci = quantile(le, probs = c(.975), na.rm = TRUE))
 
-# Free unused memory and save results
+# Free unused memory and save resultsfor later use
 gc(); save(le_df_nimble,file=paste0(path_onedrive, "le_df_nimble_20250117.Rdata"))

@@ -12,11 +12,14 @@ appendix <- paste0(results, "Appendix/")
 path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-LE-Philadelphia/Data - Cleansed/"
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
 
+# Load data created in 01-Crosswalks
 load(file = paste0(path_onedrive,'sex_years.Rdata'))
 load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
 
+
 # Mortality Rates ---------------------------------------------------------
 
+# Load data data created in 02-Deaths and 03-Population
 load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
 load(paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata")); gc()
 
@@ -73,4 +76,3 @@ sum(phila_death_rates_age$pop) # 9,511,239
 # Save data (to encrypted drive)
 save(phila_death_rates_age_tract, phila_death_rates_age, 
      file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
-

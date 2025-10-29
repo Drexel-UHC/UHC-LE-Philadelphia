@@ -1,12 +1,9 @@
 
-# Load Libraries ----------------------------------------------------------
+# Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
 library(tidyverse)
 library(sf)
-
-
-# Shapefile/Paths/Crosswalks ----------------------------------------------
 
 # Create variable to house directory paths
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
@@ -18,7 +15,6 @@ phila_sf <- read_sf(dsn = "Data/ct10_prcm20230419/CT10_PRCM20230419.shp") %>%
   rename(GEOID = GEOID10) %>%
   mutate(GEOID = as.numeric(GEOID)) %>%
   arrange(GEOID)
-
 
 # Save shapefile for later use
 save(phila_sf, file = paste0(path_onedrive, "phila_sf.Rdata"))
@@ -44,11 +40,12 @@ geoid_crosswalk <- read_csv("./Data/ltdb_ct20toct10_xwalk_files/ct20_ct10_xwalk.
   rename(WEIGHT = "TR20_TO_TR10_WEIGHT") %>%
   mutate(GEOID20 = as.numeric(GEOID20), GEOID10 = as.numeric(GEOID10))
 
+# Save crosswalk for later use
+save(geoid_crosswalk, file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
+
 # How many tracts were there in 2020 and 2010?
 geoid_crosswalk$GEOID20 %>% unique %>% length # 408
 geoid_crosswalk$GEOID10 %>% unique %>% length # 384
-
-save(geoid_crosswalk, file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
 
 # Low population/special land use tracts
 low_pop <- phila_sf %>%
@@ -75,17 +72,11 @@ phila_sf_cross <- tract_ids %>%
   as.data.frame %>% 
   select(tract, GEOID)
 
-# phila_sf_cross_2020 <- tract_ids_2020 %>% 
-#   as.data.frame %>% 
-#   select(tract, GEOID) %>%
-#   mutate(years = "2020-2022")
-
 # Save for later use
 save(phila_sf_cross, file = paste0(path_onedrive, "phila_sf_cross.Rdata"))
 
 # Number of tracts in Philly
 N_tracts <- length(phila_tracts)
-# N_tracts_2020 <- length(phila_tracts_2020)
 
 # Crosswalk of all analysis years and their year groups
 years_cross <- data.frame(matrix(nrow=6, ncol=2)) %>% rename("year"=X1, "years"=X2) %>%
@@ -93,7 +84,7 @@ years_cross <- data.frame(matrix(nrow=6, ncol=2)) %>% rename("year"=X1, "years"=
          years=case_when(year>=2017 & year<=2019 ~ "2017-2019",
                          year>=2020 & year<=2022 ~ "2020-2022"))
 
-# Save for later use
+# Save crosswalk for later use
 save(years_cross, file = paste0(path_onedrive, "years_cross.Rdata"))
 
 # Age limit for population
@@ -125,7 +116,7 @@ age_grp_5 <- data.frame(matrix(nrow=87, ncol=2)) %>% rename("age"=X1, "age_grp_5
            age >= 80 & age < 85 ~ 80,
            age >= 85 ~ 85))
 
-# Save for later use
+# Save crosswalk for later use
 save(age_grp_5, file = paste0(path_onedrive,"age_grp_5.Rdata"))
 
 # vector of age groups
@@ -154,7 +145,7 @@ phila_tracts_ages_sexes_years <- expand.grid(phila_tracts, ages, sexes, years) %
   arrange(years, sex, tract, age) %>%
   mutate(age = as.numeric(age))
 
-# Save for later use
+# Save crosswalk for later use
 save(phila_tracts_ages_sexes_years, file = paste0(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
 
 # Crosswalk of all age groups x tracts x sexes x years
@@ -164,17 +155,8 @@ phila_tracts_age_grp_5_sexes_years <- expand.grid(phila_tracts, age_grp_5_vec, s
   arrange(years, sex, tract, age_grp_5) %>%
   mutate(age_grp_5 = as.numeric(age_grp_5))
 
+# Save crosswalk for later use
 save(phila_tracts_age_grp_5_sexes_years, file = paste0(path_onedrive,'phila_tracts_age_grp_5_sexes_years.Rdata'))
-
-# phila_tracts_age_grp_5_sexes_years_2020 <- expand.grid(phila_tracts_2020, age_grp_5_vec, sexes, years) %>%
-#   rename(GEOID = Var1, age_grp_5 = Var2, sex = Var3, years = Var4) %>%
-#   inner_join(phila_sf_cross_2020) %>%
-#   arrange(years, sex, tract, age_grp_5) %>%
-#   mutate(age_grp_5 = as.numeric(age_grp_5))
-# 
-# save(phila_tracts_age_grp_5_sexes_years_2020, file = paste0(path_onedrive,'phila_tracts_age_grp_5_sexes_years_2020.Rdata'))
-# 
-# phila_tracts_age_grp_5_sexes_years <- rbind(phila_tracts_age_grp_5_sexes_years_2010, phila_tracts_age_grp_5_sexes_years_2020)
 
 # Crosswalk of sexes x years
 sex_years <- phila_tracts_ages_sexes_years %>%
@@ -183,11 +165,5 @@ sex_years <- phila_tracts_ages_sexes_years %>%
   mutate(sex_years_lab = paste0(sex, " ", years) %>%
            factor(levels = c("Male 2006-2010", "Male 2011-2015", "Male 2016-2020", "Female 2006-2010", "Female 2011-2015", "Female 2016-2020")))
 
-# sex_years <- phila_tracts_ages_sexes_years %>%
-#   group_by(sex, years) %>%
-#   summarise(sex_years = cur_group_id()) %>%
-#   mutate(sex_years_lab = paste0(sex, " ", years) %>%
-#            factor(levels = c("Male 2017-2019", "Male 2020-2022", "Female 2017-2019", "Female 2020-2022")),
-#          gender)
-
+# Save crosswalk for later use
 save(sex_years, file = paste0(path_onedrive,'sex_years.Rdata'))

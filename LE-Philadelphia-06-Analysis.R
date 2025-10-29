@@ -29,16 +29,13 @@ appendix <- paste0(results, "Appendix/")
 path_onedrive <- "Data - Cleansed/"
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
 
-# Load Data
-load(file=paste0(path_onedrive, "le_df_nimble_20250117.Rdata"))
+# Load data created in 01-Crosswalks 
 load(file=paste0(path_onedrive,'sex_years.RData'))
 load(file=paste0(path_onedrive,'phila_sf.RData'))
 load(file = paste0(path_onedrive, "phila_sf_2020.Rdata"))
 load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
 load(file=paste0(path_onedrive,'tract_ids.RData'))
 load(file = paste0(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
-load(file=paste0(path_onedrive,'phila_pop_acs.RData'))
-load(file=paste0(path_onedrive,'phila_pop_seer.RData'))
 
 # All tracts in Philly
 phila_tracts <- unique(phila_sf$GEOID)
@@ -46,6 +43,9 @@ phila_tracts_2020 <- unique(phila_sf_2020$GEOID)
 
 
 # Dataframes for Maps -----------------------------------------------------
+
+# Load LE data calculated in 05-Models
+load(file=paste0(path_onedrive, "le_df_nimble_20250117.Rdata"))
 
 # Dataframe for maps of life expectancy at birth by census tract x sex x years
 le_birth <- filter(le_df_nimble, Age == 0) %>%
@@ -67,21 +67,23 @@ le_birth <- filter(le_df_nimble, Age == 0) %>%
   inner_join(tract_ids) %>%
   arrange(sex_years, tract)
 
+# Save for Shiny app
 save(le_birth, file = "ShinyApp/Data/le_birth.Rdata")
 
 
 # Summary -----------------------------------------------------------------
 
+# Load LE at birth data created above
 load(file = "ShinyApp/Data/le_birth.Rdata"); gc()
 
-# summarise by averaging across tracts for sex/time
+# Summarize by averaging across tracts for sex/time
 le_summary <- le_birth %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(le_med = round(median(med, na.rm = TRUE),2),
-            le_lci = round(quantile(med, 0.025, na.rm=T),2),
-            le_uci = round(quantile(med, 0.975, na.rm=T),2))
+            le_P10 = round(quantile(med, 0.1, na.rm=T),2),
+            le_P90 = round(quantile(med, 0.9, na.rm=T),2))
 
-# summarise change in LE
+# Summarize change in LE
 le_change_summary <- le_birth %>%
   pivot_wider(names_from = years, values_from = med, values_fill = 0) %>%
   group_by(GEOID, sex) %>%
@@ -91,8 +93,8 @@ le_change_summary <- le_birth %>%
   mutate(le_change = t2 - t1) %>%
   group_by(sex) %>%
   summarise(change_med = round(median(le_change, na.rm = T),2),
-            change_lci = round(quantile(le_change, 0.025, na.rm = T),2),
-            change_uci = round(quantile(le_change, 0.975, na.rm = T),2))
+            change_P10 = round(quantile(le_change, 0.1, na.rm = T),2),
+            change_P90 = round(quantile(le_change, 0.9, na.rm = T),2))
 
 # % of Tracts that had a decrease in LE
 le_decrease <- le_birth_change %>%
@@ -104,10 +106,10 @@ le_decrease <- le_birth_change %>%
 
 # MHI ---------------------------------------------------------------------
 
-# Load 2020-2010 GEOID Crosswalk
+# Load 2020-2010 GEOID Crosswalk created in 01-Crosswalks
 load(file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
 
-#Pull mhi by tract
+#Pull MHI by tract
 mhi_1 <-  map_dfr(c(2019:2023), function(year_mhi){
   df <- get_acs(geography = "tract", survey = "acs5", state = 42, year = year_mhi,
                variables = c(mhi = "B19013_001")) %>% # pop_male = "B01001_002", pop_female = "B01001_026", pop_total = "B01001_001",
@@ -144,13 +146,6 @@ mhi_comp_unchanged_tracts <- mhi_1 %>%
   pivot_wider(names_from = years, values_from = mhi, values_fill = 0) %>%
   group_by(GEOID) %>%
   summarise_all(sum) %>%
-  # mutate(
-  #   `2017-2019` = case_when(
-  #     GEOID %in% phila_tracts ~ `2017-2019`,
-  #     TRUE ~ NA_real_),
-  #   `2020-2022` = case_when(
-  #     GEOID %in% phila_tracts_2020 ~ `2020-2022`,
-  #     TRUE ~ NA_real_)) %>%
   mutate(
     `2019` = case_when(
       GEOID %in% phila_tracts ~ `2019`,
@@ -167,17 +162,13 @@ mhi_comp_unchanged_tracts <- mhi_1 %>%
     `2023` = case_when(
       GEOID %in% phila_tracts_2020 ~ `2023`,
       TRUE ~ NA_real_)) %>%
-  # filter(!is.na(`2017-2019`) & !is.na(`2020-2022`),
-  #        !(GEOID %in% low_pop)) %>%
   filter(!is.na(`2019`) & !is.na(`2020`),
          !is.na(`2021`) & !is.na(`2022`),
          !is.na(`2023`) & !(GEOID %in% low_pop)) %>%
-  # mutate(diff = `2020-2022` - `2017-2019`, pct = diff/`2017-2019`*100)
   mutate(diff_2020 = `2020` - `2019`, pct_2020 = diff_2020/`2019`*100,
          diff_2021 = `2021` - `2019`, pct_2021 = diff_2021/`2019`*100,
          diff_2022 = `2022` - `2019`, pct_2022 = diff_2022/`2019`*100,
          diff_2023 = `2023` - `2019`, pct_2023 = diff_2023/`2019`*100)
-
 
 # Filter for just 2020-2022 and map to 2010 census tracts
 mhi_2020_2022 <- mhi_1 %>%
@@ -204,7 +195,7 @@ mhi <- mhi_1 %>%
       GEOID %in% low_pop ~ NA_real_,
       TRUE ~ mhi))
 
-# Save as R data file
+# Save for later use
 save(mhi, file = paste0(path_onedrive, "mhi.Rdata"))
 
 # MHI for sensitivity analysis - time varying MHI
@@ -223,7 +214,7 @@ mhi_sensitivity <- mhi_1 %>%
       GEOID %in% low_pop ~ NA_real_,
       TRUE ~ mhi))
 
-# Save as R data file
+# Save for later use
 save(mhi_sensitivity, file = paste0(path_onedrive, "mhi_sensitivity.Rdata"))
 
 # Compare 2017-2019 and 2020-2022 MHI
@@ -287,7 +278,7 @@ save(mhi_deciles_sensitivity, file=paste0(path_onedrive, "mhi_deciles_sensitivit
 
 # LE by Iteration with Income Decile --------------------------------------
 
-#Load LE & MHI data
+#Load LE data created in 05-Models & MHI data created above
 load(paste0(path_onedrive,'le_iter_nimble_20250117.Rdata'))
 load(file=paste0(path_onedrive, "mhi_deciles.Rdata"))
 load(file=paste0(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
@@ -367,11 +358,6 @@ le_birth_change_neg <- le_birth_change %>%
   summarise(neg_pct = mean(neg, na.rm = T)) %>%
   mutate(neg_pct = round(neg_pct*100,2))
 
-le_birth_change_neg_sig <- le_birth_change %>%
-  mutate(neg_uci = uci < 0) %>%
-  group_by(sex) %>%
-  summarise(neg_uci_pct = mean(neg_uci, na.rm = T))
-
 # Posterior probability of decrease in LE
 le_birth_post_prob_dec <- le_iter_change %>%
   mutate(decr = change < 0) %>%
@@ -428,7 +414,11 @@ le_iter_change_deciles_sensitivity <-   bind_rows(
 # Save for later use
 save(le_iter_change_deciles_sensitivity, file = paste0(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
 
+
 # Total Disparities -------------------------------------------------------
+
+#Load LE data created in 05-Models
+load(file=paste0(path_onedrive, "le_iter.R"))
 
 # Absolute disparities
 abs_ineq_long <- le_iter %>%
@@ -488,9 +478,10 @@ abs_ineq_time_disparities <- abs_ineq_long %>%
     uci_ratio_ratio=as.numeric(quantile(ratio_ratio,probs=0.975)),
     lci_ratio_ratio=as.numeric(quantile(ratio_ratio,probs=0.025)))
 
+# Remove scientific notation
 options(scipen=999)
 
-# Create table with CIs
+# Create table with credible intervals
 summary_table <- abs_ineq_summary %>%
     mutate_at(.vars = vars(med_dif,uci_dif,lci_dif, med_ratio, uci_ratio, lci_ratio,
                            med_cv, uci_cv, lci_cv, med_gini, uci_gini, lci_gini), round, digits = 2) %>%
@@ -506,13 +497,13 @@ summary_table <- abs_ineq_summary %>%
       Gini = paste0(med_gini, " (", lci_gini, ", ", uci_gini, ")"),
       MLD = paste0(med_mld.wt, " (", lci_mld.wt, ", ", uci_mld.wt, ")"))
 
-# Save as R object
+# Save data for Shiny app
 save(summary_table, file = "ShinyApp/Data/summary_table.Rdata")
 
 # Write table to CSV
 write.csv(summary_table, paste0(working_results,"summary_table_20250117.csv"), row.names = FALSE)
 
-# Create table with CIs
+# Create table with credible intervals
 summary_time_disparities_table <- abs_ineq_time_disparities %>%
     mutate_at(.vars = vars(med_dif_dif,uci_dif_dif,lci_dif_dif,
                            med_ratio_ratio, uci_ratio_ratio, lci_ratio_ratio), round, digits = 2) %>%
@@ -525,9 +516,14 @@ summary_time_disparities_table <- abs_ineq_time_disparities %>%
 # Write table to CSV
 write.csv(summary_time_disparities_table, paste0(working_results,"summary_time_disparities_table_20250117.csv"), row.names = FALSE)
 
+
 # Income-Based Disparities ------------------------------------------------
 
-load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata"))
+# Load population data created in 03-Population
+load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
+
+# Load iteration-level LE and changes in LE by deciles created above
+load(file=paste0(path_onedrive, "le_iter.R")); gc()
 
 # Find the top/bottom ratio and top/bottom difference for LE using MHI deciles - Main Analysis
 decile_le <- le_iter %>%
@@ -540,6 +536,12 @@ decile_le <- le_iter %>%
   mutate(dif=le_decile1-le_decile0, 
          ratio=le_decile1/le_decile0)
 
+# Unload LE by iteration and clear memory
+rm(le_iter); gc()
+
+# Load iteration-level changes in LE data created above
+load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
+
 # Find the top/bottom ratio and top/bottom difference for change in LE using MHI deciles - Main Analysis
 decile_le_change <- le_iter_change_deciles %>%
   filter(!is.na(change)) %>%
@@ -551,6 +553,12 @@ decile_le_change <- le_iter_change_deciles %>%
   mutate(dif=le_decile1-le_decile0, 
          ratio=le_decile1/le_decile0)
 
+# Unload change in LE by iteration and clear memory
+rm(le_iter_change_deciles); gc()
+
+# Load iteration-level LE for sensitivity analysis created above
+load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
+
 # Find the top/bottom ratio and top/bottom difference using MHI deciles - Sensitivity Analysis
 decile_le_sensitivity <- le_iter_sensitivity %>%
   filter(!is.na(le))%>%
@@ -561,6 +569,9 @@ decile_le_sensitivity <- le_iter_sensitivity %>%
   pivot_wider(names_from=decile_income1, names_prefix="le_decile", values_from="le")%>%
   mutate(dif=le_decile1-le_decile0, 
          ratio=le_decile1/le_decile0)
+
+# Unload LE by iteration (sensitivity) and clear memory
+rm(le_iter_sensitivity); gc()
 
 # Find median, 97.5, and 2.5 percentile for the ratio/difference measures for LE - Main Analysis
 summary_income <- decile_le %>%
@@ -600,6 +611,9 @@ summary_income_sensitivity <- decile_le_sensitivity %>%
 # socioeconomic group and a person in the lowest socioeconomic group
 # RII - Relative Index of Inequality - SII rel. to avg. health in the population
 
+# Load iteration-level LE and changes in LE by deciles created above
+load(file=paste0(path_onedrive, "le_iter.R")); gc()
+
 # SII/RII - Main Analysis
 income_ineq_v2 <- le_iter %>%
   filter(!is.na(le))%>%
@@ -612,6 +626,12 @@ income_ineq_v2 <- le_iter %>%
               model_rii %>% filter(term=="decile_income1") %>% select(estimate) %>% mutate(type="rii"))
   }) %>%
   pivot_wider(names_from = "type", values_from = "estimate")
+
+# Unload LE by iteration and clear memory
+rm(le_iter); gc()
+
+# Load iteration-level changes in LE data created above
+load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
 
 # SII/RII for change in LE - Main Analysis
 income_ineq_v2_change <- le_iter_change_deciles %>%
@@ -626,6 +646,12 @@ income_ineq_v2_change <- le_iter_change_deciles %>%
   }) %>%
   pivot_wider(names_from = "type", values_from = "estimate")
 
+# Unload change in LE by iteration and clear memory
+rm(le_iter_change_deciles); gc()
+
+# Load iteration-level LE for sensitivity analysis created above
+load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
+
 # SII/RII - Sensitivity Analysis
 income_ineq_v2_sensitivity <- le_iter_sensitivity %>%
   filter(!is.na(le))%>%
@@ -638,6 +664,9 @@ income_ineq_v2_sensitivity <- le_iter_sensitivity %>%
               model_rii %>% filter(term=="decile_income1") %>% select(estimate) %>% mutate(type="rii"))
   }) %>%
   pivot_wider(names_from = "type", values_from = "estimate")
+
+# Unload LE by iteration (sensitivity) and clear memory
+rm(le_iter_sensitivity); gc()
 
 # Find median, 97.5, and 2.5 percentile for the SII and RII - Main Analysis
 income_ineq_v3 <- income_ineq_v2 %>%
@@ -694,7 +723,7 @@ income_ineq_table <- income_ineq %>%
   ungroup %>%
   select(-c(years, sex, sex_years))
 
-# Save as R object
+# Save data for Shiny app
 save(income_ineq_table, file = "ShinyApp/Data/income_ineq_table.Rdata")
 
 # Write table to CSV
@@ -727,46 +756,14 @@ income_ineq_table_sensitivity <- income_ineq_sensitivity %>%
   ungroup %>%
   select(-c(years, sex, sex_years))
 
-# Calculate disparities between time periods
-income_time_disparities <- income_ineq_v2 %>%
-  group_by(iteration, Age, sex) %>%
-  mutate(ID = cur_group_id(), sii_2017_2019 = sii, sii_2020_2022 = lead(sii), rii_2017_2019 = rii, rii_2020_2022 = lead(rii)) %>%
-  group_by(iteration, Age, sex, years, sex_years, sex_years_lab) %>%
-  summarise(dif_sii = sii_2020_2022 - sii_2017_2019, ratio_rii = rii_2020_2022/rii_2017_2019)%>%
-  filter(!is.na(dif_sii) & !is.na(ratio_rii)) %>%
-  select(-c("years", "sex_years", "sex_years_lab")) %>%
-  group_by(Age, sex) %>%
-  summarise(
-    med_dif_sii=median(dif_sii),
-    uci_dif_sii=as.numeric(quantile(dif_sii,probs=0.975)),
-    lci_dif_sii=as.numeric(quantile(dif_sii,probs=0.025)),
-    med_ratio_rii=median(ratio_rii),
-    uci_ratio_rii=as.numeric(quantile(ratio_rii,probs=0.975)),
-    lci_ratio_rii=as.numeric(quantile(ratio_rii,probs=0.025)))
-
-# Create table with CIs
-income_time_disparities_table <- income_time_disparities %>%
-  mutate_if(is.numeric, round, digits = 2) %>%
-  transmute(
-    Age = Age,
-    Sex = sex,
-    AbsDif_SII = paste0(med_dif_sii, " (", lci_dif_sii, ", ", uci_dif_sii, ")"),
-    RelDif_RII = paste0(med_ratio_rii, " (", lci_ratio_rii, ", ", uci_ratio_rii, ")"))
-
-# Write table to CSV
-write.csv(income_time_disparities_table, paste0(working_results,"income_time_disparities_table_20250117.csv"), row.names = FALSE)
-
-# Save as R object
-save(income_time_disparities_table, file = "ShinyApp/Data/income_time_disparities_table_20250117.Rdata")
+# Save data for Shiny app
+save(income_ineq_table_sensitivity, file = paste0(path_onedrive, "income_ineq_table_sensitivity.Rdata"))
 
 
 # Data for LE by MHI Decile Plots -----------------------------------------
 
-# Load data
-load(file=paste0(path_onedrive, "le_iter.R"))
-load(file=paste0(path_onedrive, "le_iter_sensitivity.R"))
-load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata"))
-load(file = paste0(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
+# Load iteration-level LE and changes in LE by deciles created above
+load(file=paste0(path_onedrive, "le_iter.R")); gc()
 
 # LE by Decile
 le_by_decile <- le_iter %>%
@@ -786,8 +783,14 @@ le_by_decile <- le_iter %>%
             sd_uci = quantile(wtdsd, probs = c(0.975), na.rm = TRUE)) %>%
   rename(Sex = sex)
 
-#Save for later use
+# Unload LE by iteration and clear memory
+rm(le_iter); gc()
+
+#Save data for later use and for Shiny app
 save(le_by_decile, file = "ShinyApp/Data/le_by_decile.Rdata")
+
+# Load iteration-level LE for sensitivity analysis created above
+load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
 
 # LE by Decile for sensitivity analysis
 le_by_decile_sensitivity <- le_iter_sensitivity %>%
@@ -800,8 +803,14 @@ le_by_decile_sensitivity <- le_iter_sensitivity %>%
   summarise(le = median(le)) %>%
   rename(Sex = sex)
 
-#Save for later use
+# Unload LE by iteration (sensitivity) and clear memory
+rm(le_iter_sensitivity); gc()
+
+#Save data for later use
 save(le_by_decile_sensitivity, file = paste0(path_onedrive, "le_by_decile_sensitivity.Rdata"))
+
+# Load iteration-level changes in LE data created above
+load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
 
 # Change in LE by MHI decile - Main Analysis
 le_change_by_decile <- le_iter_change_deciles %>%
@@ -815,8 +824,14 @@ le_change_by_decile <- le_iter_change_deciles %>%
   rename(Sex = sex) %>%
   mutate(`MHI Years` = years)
 
-# Save for later use
+# Unload change in LE by iteration and clear memory
+rm(le_iter_change_deciles); gc()
+
+# Save data for later use
 save(le_change_by_decile, file = paste0(path_onedrive, "le_change_by_decile.Rdata"))
+
+# Load iteration-level LE changes (sensitivity) created above
+load(file = paste0(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
 
 # Change in LE by MHI decile - Sensitivity Analysis
 le_change_by_decile_sensitivity <- le_iter_change_deciles_sensitivity %>%
@@ -830,57 +845,21 @@ le_change_by_decile_sensitivity <- le_iter_change_deciles_sensitivity %>%
   rename(Sex = sex) %>%
   mutate(`MHI Years` = years)
 
-# Save for later use
+# Unload change in LE by iteration (sensitivity) and clear memory
+rm(le_iter_change_deciles_sensitivity); gc()
+
+# Save data for later use
 save(le_change_by_decile_sensitivity, file = paste0(path_onedrive, "le_change_by_decile_sensitivity.Rdata"))
+
 
 # Mortality Rate Plots ---------------------------------------------------
 
+# Load mortality rate data created in 03-Mortality-Rates and 05-Models
 load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
 load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata")); gc()
+load(file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'))
 
-# How many 0 deaths?
-sum(phila_death_rate_seer_all_fixes$deaths == 0)/nrow(phila_death_rate_seer_all_fixes)
-mean(phila_death_rate_seer_all_fixes$deaths)
-sd(phila_death_rate_seer_all_fixes$deaths)^2
-range(phila_death_rate_seer_all_fixes$deaths)
-
-nozero <- phila_death_rate_seer_all_fixes %>% filter(deaths > 0)
-mean(nozero$deaths)
-sd(nozero$deaths)^2
-range(nozero$deaths)
-
-lambda_star <- loess(log_rate ~ age, 
-                     data = phila_death_rate_age_seer_all_fixes %>% filter(sex_years == 1), 
-                     degree = 2, span = 0.25)$fitted %>%
-  append(loess(log_rate ~ age, 
-               data = phila_death_rate_age_seer_all_fixes %>% filter(sex_years == 2), 
-               degree = 2, span = 0.25)$fitted) %>%
-  append(loess(log_rate ~ age, 
-               data = phila_death_rate_age_seer_all_fixes %>% filter(sex_years == 3), 
-               degree = 2, span = 0.25)$fitted) %>%
-  append(loess(log_rate ~ age, 
-               data = phila_death_rate_age_seer_all_fixes %>% filter(sex_years == 4), 
-               degree = 2, span = 0.25)$fitted)
-
-phila_death_rate_age_seer_all_fixes <- phila_death_rate_age_seer_all_fixes %>%
-  cbind(log_lambda_star = lambda_star)
-
-# Plot lambda star
-lambda_star_plot <- phila_death_rate_age_seer_all_fixes %>%
-  ggplot(aes(x = age, y = log_lambda_star)) +
-  geom_line() +
-  facet_wrap(~sex_years_lab) +
-  labs(x = "Age", y = "Log Mortality Rate") +
-  theme_bw() +
-  theme(axis.text=element_text(color="black", size=24),
-        axis.title =element_text(color="black", size=24),
-        strip.text=element_text(color="black", size=24))
-lambda_star_plot
-
-# Save as png
-ggsave(filename = "C:/Users/ga437/OneDrive - Drexel University/General - SAE Philly/0 - Papers (Life Expectancy)/JSM 2024/Figures/theta_star.png", 
-       plot = lambda_star_plot, device = "png", width = 7, height = 7)
-
+# Plot estimated rates with credible intervals
 rates_plot_ribbon <- thetas_med_ci %>% 
   group_by(GEOID) %>% 
   group_map(~{
@@ -901,267 +880,40 @@ rates_plot_ribbon <- thetas_med_ci %>%
     p
   })
 
+# Save as PDF
 pdf(file = paste0(working_results,"rates_plot_ribbon_20250117.pdf"))
 rates_plot_ribbon
 dev.off()
 
-# Plot for census tract 42101001102
-rates_42101001102 <- lambdas_med_ci %>% 
-  filter(GEOID == 42101001102) %>% 
-  ggplot(aes(x=age)) +
-  geom_point(aes(x = knot, y = offset), color = "blue")+
-  geom_rug(aes(x = rug))+
-  geom_line(aes(y = offset), linetype = "dashed", color = "blue", )+
-  geom_line(aes(y = med))+
-  geom_ribbon(aes(ymin=lci, ymax=uci), alpha=0.3)+
-  geom_ribbon(aes(ymin=offset_lci, ymax=offset_uci), fill = "blue", alpha=0.3)+
-  geom_line(aes(y=theta_star), color="red")+
-  geom_hline(yintercept = 0)+
-  geom_point(pch=21, fill=NA, color="black", aes(y=crude))+
-  geom_label(data = filter(thetas_med_ci, GEOID == 42101001102, age == 25, sex_years == 1),
-            aes(y = offset + 1, label = "offset"), color = "blue", vjust = -0.5, size = 6)+
-  geom_label(data = filter(lambdas_med_ci, GEOID == 42101001102, age == 25, sex_years == 1),
-            aes(y = theta_star - 1, label = "standard \n schedule"), color = "red", vjust = -0.5, size = 6)+
-  geom_label(data = filter(lambdas_med_ci, GEOID == 42101001102, age == 25, sex_years == 1),
-            aes(y = med + 0.5, label = "log MR"), color = "black", vjust = -0.5, size = 6)+
-  facet_wrap(~sex_years_lab)+
-  labs(x = "Age", y = "Log Mortality Rate")+
-  theme_bw()+
-  theme(strip.text = element_text(size=24),
-        axis.title = element_text(size=24),
-        axis.text = element_text(size=24))
-rates_42101001102
-
-pdf(file = paste0(working_results,"rates_42101001102.pdf"), width = 9, height = 9)
-rates_42101001102
-dev.off()
-
-png(file = paste0(working_results,"rates_42101001102.png"))
-rates_42101001102
-dev.off()
-
-ggsave(filename = "C:/Users/ga437/OneDrive - Drexel University/General - SAE Philly/0 - Papers (Life Expectancy)/JSM 2024/Figures/rates_42101001102.png", 
-       plot = rates_42101001102, device = "png", width = 7, height = 7)
-
-
-# Racial-Ethnic Distribution of Deciles -----------------------------------
-
-decile_by_racehisp <- inner_join(pop_hisp, pop_nhb, by = c("GEOID", "years", "Total", "decile_income")) %>%
-  select(GEOID, years, Hispanic, NHB, Total, decile_income) %>%
-  group_by(decile_income, years) %>%
-  summarise(hisp = sum(Hispanic), nhb = sum(NHB), tot = sum(Total)) %>%
-  mutate(pct_hisp = hisp/tot*100, pct_nhb = nhb/tot*100) %>%
-  arrange(years, decile_income)
-
-#Write table to CSV
-write.csv(decile_by_racehisp, paste0(working_results,"decile_by_racehisp_20240206.csv"), row.names = FALSE)
-
-decile_by_racehisp_long <- decile_by_racehisp %>%
-  pivot_longer(cols = c("pct_hisp", "pct_nhb"), names_to = "racehisp", values_to = "pct") %>%
-  mutate(racehisp = case_when(
-    racehisp == "pct_hisp" ~ "Hispanic",
-    racehisp == "pct_nhb" ~ "Non-Hispanic Black"
-  ))
-
-decile_by_racehisp_plot <- decile_by_racehisp_long %>%
-  ggplot(aes(x=decile_income, y=pct)) + 
-  geom_line(aes(group=racehisp, color=racehisp))+
-  geom_point(aes(color=racehisp))+
-  labs(x="Decile of Median Household Income",
-       y="% of Decile Population")+
-  #scale_y_continuous(limits=c(65, 85.8), breaks=seq(65, 85, by=5))+
-  scale_x_continuous(limits=c(0, 10), breaks=seq(0, 10 , by=2))+
-  theme_bw() +
-    theme(axis.text=element_text(color="black", size=15),
-        axis.title.x =element_text(color="black", face="bold", size=20),
-        axis.title.y =element_text(color="black", face="bold", size=20),
-        strip.text=element_text(color="black", face="bold", size=20),
-        strip.background = element_blank(), 
-        legend.position = "bottom", 
-        legend.text = element_text(color = "black", size = 20),
-        legend.title = element_text(color="black", size = 20)) + 
-  guides(color=guide_legend(title="Racial-Ethnic Group")) + 
-  facet_wrap(~years)
-decile_by_racehisp_plot
-
-ggsave(filename = paste0(working_results,"decile_by_racehisp_plot_20240206.pdf"), plot = decile_by_racehisp_plot, 
-       device = "pdf", width = 14, height = 10)
-
-ggsave(filename = paste0(working_results, "decile_by_racehisp_plot_20240206.png"), plot = decile_by_racehisp_plot, 
-       device = "png", width = 15, height = 10)
-
-
-# Boxplots ----------------------------------------------------------------
-
-boxplots_le <- ggplot(le_birth) +
-  geom_boxplot(aes(x = sex, y = med, color = sex)) +   
-  theme_bw() +
-  labs(x = "Sex", y = "Life Expectancy at Birth") +
-  theme(legend.position = "bottom",
-        legend.key.width = unit(50, "points"),
-        legend.title = element_text(size=20),
-        legend.text = element_text(size=20),
-        panel.grid.major.x = element_blank(),
-        axis.text.x=element_text(size=18, color="black"),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.title=element_text(face="bold", size=20),
-        strip.text =element_text(face="bold", size=20),
-        strip.background = element_blank()) +
-  facet_wrap(~years) +
-  guides(color=guide_legend(title="Sex"))
-boxplots_le
-
-ggsave(filename = paste0(working_results,"boxplots_le_20250117.png"), plot = boxplots_le, 
-       device = "png", width = 15, height = 10)
-
-
-# MHI Plots ---------------------------------------------------------------
-
-# Density plots comparing MHI by time period
-mhi_density_plot <- mhi %>%
-  ggplot(aes(x = mhi, fill = years)) +
-  geom_density(alpha = 0.5) +
-  labs(x = "Decile of Median Household Income", y = "Density") +
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.key.width = unit(50, "points"),
-        legend.title = element_text(size=20),
-        legend.text = element_text(size=20),
-        panel.grid.major.x = element_blank(),
-        axis.text.x=element_text(size=18, color="black"),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.title=element_text(face="bold", size=20),
-        strip.text =element_text(face="bold", size=20),
-        strip.background = element_blank()) +
-  guides(fill=guide_legend(title="Time Period"))
-mhi_density_plot
-
-#scatterplot comparing MHI by time period
-mhi_scatter_plot <- mhi %>%
-  pivot_wider(names_from = years, values_from = mhi, values_fill = 0) %>%
-  select(-c("pop_female", "pop_male", "pop_total")) %>%
-  group_by(GEOID) %>%
-  summarise(across(everything(), sum))
-  ggplot(aes(x = mhi, y = le, color = years)) +
-  geom_point() +
-  labs(x = "Decile of Median Household Income", y = "Life Expectancy at Birth") +
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.key.width = unit(50, "points"),
-        legend.title = element_text(size=20),
-        legend.text = element_text(size=20),
-        panel.grid.major.x = element_blank(),
-        axis.text.x=element_text(size=18, color="black"),
-        axis.text.y=element_text(size=18, color="black"),
-        axis.title=element_text(face="bold", size=20),
-        strip.text =element_text(face="bold", size=20),
-        strip.background = element_blank()) +
-  guides(color=guide_legend(title="Time Period"))
-mhi_scatter_plot
-
-
-# Population Demographic Maps ---------------------------------------------
-
-# Pull data on % of each tract that is Hispanic
-pop_hisp <- get_acs(geography = "tract", year = 2015, state = 42, 
-                    variables = c("Hispanic" = "B03002_012", "Total" = "B03002_001")) %>%
-  mutate(years = '2011-2015') %>%
-  rbind({
-    get_acs(geography = "tract", year = 2010, state = 42, 
-            variables = c("Hispanic" = "B03002_012", "Total" = "B03002_001")) %>%
-      mutate(years = '2006-2010')
-  }) %>%
-  filter(substr(GEOID,1,5)==42101)%>%
-  pivot_wider(names_from = variable, values_from = estimate, values_fill = 0) %>%
-  group_by(GEOID, years)%>%
-  summarise_at(c("Hispanic", "Total"), sum) %>%
-  ungroup() %>%
-  mutate(pct = Hispanic/Total*100, GEOID=as.numeric(GEOID), 
-         jenks=cut(pct, breaks=classIntervals(pct,n=6,style="jenks")$brks,include.lowest=T),
-         racehisp = "Hispanic")%>%
-  inner_join(phila_sf) %>%
-  inner_join(mhi_deciles, by = c("GEOID", "years", "geometry"))
-
-# Pull data on % of each tract that is Non-Hispanic Black
-pop_nhb<-get_acs(geography = "tract", 
-                 year = 2015, state = 42, 
-                 variables = c("NHB" = "B03002_004", "Total" = "B03002_001")) %>%
-  mutate(years = '2011-2015') %>%
-  rbind({
-    get_acs(geography = "tract", 
-            year = 2010, state = 42, 
-            variables = c("NHB" = "B03002_004", "Total" = "B03002_001")) %>%
-      mutate(years = '2006-2010')
-  }) %>%
-  filter(substr(GEOID,1,5)==42101)%>%
-  pivot_wider(names_from = variable, values_from = estimate, values_fill = 0) %>%
-  group_by(GEOID, years) %>%
-  summarise_at(c("NHB", "Total"), sum) %>%
-  ungroup() %>%
-  mutate(pct = NHB/Total*100, GEOID=as.numeric(GEOID), 
-         jenks=cut(pct, breaks=classIntervals(pct,n=6,style="jenks")$brks,include.lowest=T),
-         racehisp = "Non-Hispanic Black")%>%
-  inner_join(phila_sf)%>%
-  inner_join(mhi_deciles, by = c("GEOID", "years", "geometry"))
-
-# Create maps of % of each tract that is Hispanic
-pop_hisp_maps <- ggplot(pop_hisp) +
-  geom_sf(aes(geometry = geometry, fill = jenks), lwd = .1) + 
-  theme_void() +
-  theme(axis.title = element_blank(), axis.text = element_blank(), 
-        axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5, vjust = 3),
-        legend.position = "bottom", strip.text = element_text(size = 20), 
-        legend.key.width = unit(4,"cm"), legend.text = element_text(size = 20), 
-        legend.title = element_text(size = 20)) + 
-  facet_wrap(~ years, ncol = 2) +
-  #scale_fill_manual(values = colorRampPalette(colors = c("red", "white", "green"))(6))+
-  scale_fill_brewer() +
-  labs(fill = "Hispanic % of Population")
-pop_hisp_maps
-
-# Create maps of % of each tract that is Non-Hispanic Black
-pop_nhb_maps <- ggplot(pop_nhb) +
-  geom_sf(aes(geometry = geometry, fill = jenks), lwd = .1) + 
-  theme_void() +
-  theme(axis.title = element_blank(), axis.text = element_blank(), 
-        axis.ticks = element_blank(), plot.title = element_text(hjust = 0.5, vjust = 3),
-        legend.position = "bottom", strip.text = element_text(size = 20), 
-        legend.key.width = unit(4,"cm"), legend.text = element_text(size = 20), 
-        legend.title = element_text(size = 20)) + 
-  facet_wrap(~ years, ncol = 2) +
-  #scale_fill_manual(values = colorRampPalette(colors = c("red", "white", "green"))(6))+
-  scale_fill_brewer() +
-  labs(fill = "Non-Hispanic Black % of Population")
-pop_nhb_maps
-
 
 # Table 1 - Descriptive Statistics/Disparities ----------------------------
 
-# Combine total and income-based disparities for Table 1
+# Load data created above
 load(file = "ShinyApp/Data/summary_table.Rdata")
 load(file = "ShinyApp/Data/income_ineq_table.Rdata")
 load(file = "ShinyApp/Data/le_birth.Rdata")
 
-table1_averageLE <- le_birth %>%
+# Combine total and income-based disparities for Table 1
+# Median LE by sex and time period
+table1_med_LE <- le_birth %>%
   group_by(sex, years) %>%
   summarise(
-    mean_med = mean(med, na.rm = TRUE),
-    # lci = mean(lci, na.rm = TRUE),
-    # uci = mean(uci, na.rm = TRUE),
-    sd = sd(med, na.rm = TRUE)
+    median = round(median(med, na.rm = TRUE),2),
+    P10 = round(quantile(med, 0.10, na.rm = T),2),
+    P90 = round(quantile(med, 0.90, na.rm = T),2),
   ) %>%
-  mutate_if(is.numeric, round, digits = 2) %>%
   mutate(Type = '',
-         Measure = 'Average LE (SD)',
-         mean_sd = paste0(mean_med, " (", sd,")")) %>%
-  pivot_wider(names_from = c(sex, years), values_from = mean_sd, values_fill = "") %>%
-  select(-c(mean_med,sd)) %>%
+         Measure = 'Median LE [P10 - P90]',
+         med_10_90 = paste0(median, " [", P10," - ", P90,"]")) %>%
+  pivot_wider(names_from = c(sex, years), values_from = med_10_90, values_fill = "") %>%
+  select(-c(median,P10,P90)) %>%
   summarise(
     Type = first(Type),
     Measure = first(Measure),
     across(where(is.character) & !all_of(c("Type", "Measure")), ~ .[. != ""][1])
   )
 
+# Total disparities
 table1_total <- summary_table %>%
   filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
@@ -1169,6 +921,7 @@ table1_total <- summary_table %>%
   pivot_longer(values_to = "Value", cols = c(AbsDif, RelDif), names_to = "Measure") %>%
   pivot_wider(names_from = c(Sex, Years), values_from = Value)
 
+# Income-based disparities
 table1_income <- income_ineq_table %>%
   filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
@@ -1176,12 +929,15 @@ table1_income <- income_ineq_table %>%
   pivot_longer(values_to = "Value", cols = c(AbsDif, RelDif), names_to = "Measure") %>%
   pivot_wider(names_from = c(Sex, Years), values_from = Value)
 
-table1 <- rbind(table1_averageLE, 
+# Table 1
+table1 <- rbind(table1_med_LE, 
                 table1_total, 
                 table1_income)
 
+# Write table to CSV
 write.csv(table1, paste0(main_text,"table1.csv"), row.names = FALSE)
 
+# Income-based disparities for sensitivity analysis
 table1_income_sensitivity <- income_ineq_table_sensitivity %>%
   filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
@@ -1189,6 +945,7 @@ table1_income_sensitivity <- income_ineq_table_sensitivity %>%
   pivot_longer(values_to = "Value", cols = c(AbsDif, RelDif), names_to = "Measure") %>%
   pivot_wider(names_from = c(Sex, Years), values_from = Value)
 
+# Table 1 (sensitivity)
 table1_sensitivity <- rbind(table1_averageLE, 
                             table1_total, 
                             table1_income_sensitivity)
@@ -1196,9 +953,8 @@ table1_sensitivity <- rbind(table1_averageLE,
 
 # Figure 1 - LE w/ Credible Intervals Plots -------------------------------
 
+# Load data created above
 load(file = "ShinyApp/Data/le_birth.Rdata")
-
-#Credible intervals by tract
 
 # Calculate ordering based on baseline years
 t1_order <- le_birth %>%
@@ -1245,7 +1001,7 @@ le_plots_t1_order <- le_birth %>%
   labs(x= "LE at Birth (Years)", col = "Years")
 le_plots_t1_order
 
-# Load LE change data
+# Load LE change data created above
 load(file = "ShinyApp/Data/le_birth_change.Rdata")
 
 # Calculate ordering based on change in LE
@@ -1291,17 +1047,19 @@ le_change_plots <- le_birth_change %>%
   labs(x= "Change in LE at Birth (Years)")
 le_change_plots
 
-library(ggpubr)
+# Combine plots
 le_plots_combined <- ggarrange(le_plots_t1_order, le_change_plots, ncol = 1)
 
+# Save as PDF and PNG
 ggsave(filename = paste0(main_text,"figure1.pdf"), plot = le_plots_combined, 
        device = "pdf", width = 16, height = 20)
 ggsave(filename = paste0(main_text,"figure1.png"), plot = le_plots_combined, 
        device = "png", width = 16, height = 18, dpi = 600)
 
+
 # Figure 2 - Maps of LE at Birth ------------------------------------------
 
-# Load data
+# Load data created above
 load(file = "ShinyApp/Data/le_birth.Rdata")
 
 # LE at birth maps
@@ -1345,10 +1103,11 @@ for (i in unique(le_sf$gen_years_lab)) {
       legend.text.size = 1.4)
 }
 
+# Put maps together
 le_maps <- tmap_arrange(le_maps_list, ncol = 2, outer.margins = 0.02, widths = c(0.5, 0.5))
 le_maps
 
-# Save as pdf
+# Save as PDF and PNG
 tmap_save(le_maps, filename = paste0(main_text,"figure2.pdf"), 
           width = 14, height = 14, dpi = 600)
 tmap_save(le_maps, filename = paste0(main_text,"figure2.png"),
@@ -1357,7 +1116,7 @@ tmap_save(le_maps, filename = paste0(main_text,"figure2.png"),
 
 # Figure 3 - Maps of Change in LE/Posterior Probability -------------------
 
-# Load data
+# Load data created above
 load(file = "ShinyApp/Data/le_birth_change.Rdata")
 load(file=paste0(path_onedrive, "le_birth_post_prob_dec.R"))
 
@@ -1439,10 +1198,13 @@ for (i in unique(le_change_sf$gen)) {
   
 }
 
+# Put maps together
 le_change_post_prob_maps_list <- c(le_change_maps_list, post_prob_maps_list)[c(1,3,2,4)]
 le_change_post_prob_maps <- tmap_arrange(le_change_post_prob_maps_list, 
                                          ncol = 2, nrow = 2, outer.margins = 0.02)
 le_change_post_prob_maps
+
+# Save as PDF and PNG
 tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.pdf"), 
           width = 14, height = 14, dpi = 600)
 tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.png"),
@@ -1540,11 +1302,128 @@ le_change_by_decile_plot
 # Stack plots of LE by MHI decile and chage in LE by MHI decile - Main Analysis
 le_by_decile_plot_stacked <- ggarrange(le_by_decile_plot_sii, le_change_by_decile_plot, ncol = 1)
 
-# Save plots
+# Save plots as PDF and PNG
 ggsave(filename = paste0(main_text,"figure4.pdf"), plot = le_by_decile_plot_stacked, 
        device = "pdf", width = 10, height = 12, dpi = 600)
 ggsave(filename = paste0(main_text,"figure4.png"), plot = le_by_decile_plot_stacked, 
        device = "png", width = 10, height = 11, dpi = 600)
+
+
+# Appendix S4 -------------------------------------------------------------
+
+# Load mortality data created in 02-Deaths (from encrypted drive)
+load(file = paste0(dir_name, "Philly LE\\", "phila_deaths.Rdata"))
+load(file = paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata"))
+
+# Summary table for age at death in Philadelphia for Appendix S4
+phila_age_at_death_summary <- phila_deaths_nolow %>% 
+  group_by(years) %>%
+  summarise(mean = round(mean(Age_death, na.rm = TRUE), 2), 
+            sd = round(sd(Age_death, na.rm = TRUE), 2)) %>%
+  mutate(sex = "  Total") %>%
+  bind_rows(
+    phila_deaths_nolow %>% 
+      group_by(years, sex) %>%
+      summarise(mean = round(mean(Age_death, na.rm = TRUE), 2), 
+                sd = round(sd(Age_death, na.rm = TRUE), 2)) %>%
+      mutate(sex=paste0("    ", sex))
+  ) %>%
+  mutate(mean_sd = paste0(mean, " (", sd, ")")) %>%
+  pivot_wider(names_from = years, values_from = mean_sd, values_fill = "") %>%
+  select(-c(mean, sd)) %>%
+  group_by(sex) %>%
+  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
+  bind_rows(c(sex = "Average age at death (SD)", "2017-2019" = "", "2020-2022" = ""),
+            c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")) %>%
+  rename("Measure" = sex) %>%
+  mutate(Measure = factor(Measure, 
+                          levels = c("Average age at death (SD)", 
+                                     "  Total", 
+                                     "  Sex", 
+                                     "    Female", 
+                                     "    Male", 
+                                     "    Unknown"))) %>%
+  arrange(Measure)
+
+# Summary table of deaths in Philly by year and sex
+phila_death_count_summary_sex <- phila_death_count_nolow_unknown %>%
+  group_by(years, sex) %>%
+  summarise(deaths=sum(deaths)) %>%
+  group_by(years) %>%
+  mutate(total=sum(deaths), pct=round(deaths/total*100,2),
+         deaths_chr=format(deaths, big.mark=",",scientific=FALSE),
+         sex=paste0("    ", sex)) %>%
+  bind_rows(
+    phila_death_count_nolow_unknown %>%
+      group_by(years) %>%
+      summarise(deaths=sum(deaths), total = sum(deaths)) %>%
+      mutate(sex="  Total", pct=round(deaths/total*100,2),
+             deaths_chr=format(deaths, big.mark=",",scientific=FALSE))
+  ) %>%
+  mutate(deaths_pct = paste0(deaths_chr, " (", pct, "%)")) %>%
+  pivot_wider(names_from = years, values_from = deaths_pct, values_fill = "") %>%
+  select(-c(deaths, pct)) %>%
+  group_by(sex) %>%
+  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
+  bind_rows(c(sex = "Number of deaths (%)", "2017-2019" = "", "2020-2022" = ""),
+            c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")) %>%
+  rename("Measure" = sex) %>%
+  mutate(Measure = factor(Measure, 
+                          levels = c("Number of deaths (%)", "  Total", "  Sex", "    Female", "    Male", "    Unknown"))) %>%
+  arrange(Measure)
+
+# Summary table of race-ethnicity of Philly deaths for Table 1
+phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
+  filter(!is.na(age)) %>% 
+  group_by(years, RACEHISP) %>%
+  summarise(deaths=n()) %>%
+  group_by(years) %>%
+  mutate(total=sum(deaths),
+         deaths_chr=format(deaths, big.mark=",",scientific=FALSE), 
+         pct = round(deaths/total*100,2),
+         deaths_pct = paste0(deaths_chr, " (", pct, "%)"),
+         RACEHISP = paste0("    ", RACEHISP)) %>%
+  pivot_wider(names_from = years, values_from = deaths_pct, values_fill = "") %>%
+  select(-c(deaths, pct)) %>%
+  group_by(RACEHISP) %>%
+  summarise("2017-2019"=paste(`2017-2019`, collapse = ""), "2020-2022"=paste(`2020-2022`, collapse = "")) %>%
+  rename("Measure" = RACEHISP) %>%
+  bind_rows(c(Measure = "  Racial-ethnic group", "2017-2019" = "", "2020-2022" = "")) %>%
+  mutate(Measure = factor(Measure,
+                          levels = c("  Racial-ethnic group", "    Hispanic",  "    Non-Hispanic American Indian, Alaska Native",
+                                     "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
+                                     "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"))) %>%
+  arrange(Measure)
+
+# Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
+load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
+load(file = paste0(path_onedrive, "mhi.Rdata"))
+
+#Get average and sd of mhi for Philadelphia
+weighted_mhi_phila <- mhi %>%
+  inner_join(phila_pop_seer_total_all_fixes) %>%
+  group_by(years) %>%
+  summarise(mean = round(mean(mhi, na.rm = TRUE), 2), wtd.mean = round(weighted_mean(mhi, w=pop, na.rm = T),2),
+            sd = round(sd(mhi, na.rm = TRUE), 2), wtd.sd = round(sqrt(weighted_var(mhi, w=pop, na.rm = T)),2)) %>%
+  mutate(wtd_mean_chr = format(wtd.mean, big.mark=",",scientific=FALSE), 
+         wtd_sd_chr = format(wtd.sd, big.mark=",",scientific=FALSE),
+         wtd_mean_sd = paste0("$", wtd_mean_chr, " (", wtd_sd_chr, ")")) %>%
+  pivot_wider(names_from = years, values_from = wtd_mean_sd, values_fill = "") %>%
+  select(-c(mean, wtd.mean, sd, wtd.sd, wtd_mean_chr, wtd_sd_chr)) %>%
+  summarise_all(~paste(., collapse = "")) %>%
+  mutate("Measure" = "Population-weighted MHI (SD)") %>%
+  relocate(Measure)
+
+# Appendix S4
+appendix_mort_summary <- bind_rows(
+  phila_age_at_death_summary,
+  phila_death_count_summary_sex,
+  phila_death_count_summary_racehisp,
+  weighted_mhi_phila
+)
+
+# Save to use for Appendix S4
+write.csv(appendix_mort_summary, file = paste0(appendix,"S4.csv"), row.names = F)
 
 
 # Appendix S5 - MHI Maps --------------------------------------------------
