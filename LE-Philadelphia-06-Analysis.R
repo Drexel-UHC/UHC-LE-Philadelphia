@@ -857,7 +857,7 @@ save(le_change_by_decile_sensitivity, file = paste0(path_onedrive, "le_change_by
 # Load mortality rate data created in 03-Mortality-Rates and 05-Models
 load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
 load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata")); gc()
-load(file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'))
+load(file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata')); gc()
 
 # Plot estimated rates with credible intervals
 rates_plot_ribbon <- thetas_med_ci %>% 
