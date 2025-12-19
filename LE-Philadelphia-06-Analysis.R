@@ -75,14 +75,14 @@ save(le_birth, file = "Quarto/Data/le_birth.Rdata")
 # Load LE at birth data created above
 load(file = "Quarto/Data/le_birth.Rdata"); gc()
 
-# Median/10th and 90th decline income across tracts
+# Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(le_med = round(median(med, na.rm = TRUE),2),
             le_P10 = round(quantile(med, 0.1, na.rm=T),2),
             le_P90 = round(quantile(med, 0.9, na.rm=T),2))
 
-# Median/10th and 90th decile income across tracts
+# Median/10th and 90th percentile of life expectancy change across tracts
 le_change_summary <- le_birth %>%
   pivot_wider(names_from = years, values_from = med, values_fill = 0) %>%
   group_by(GEOID, sex) %>%
