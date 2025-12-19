@@ -134,7 +134,7 @@ phila_tracts_ages <- expand.grid(phila_tracts, ages) %>%
 save(phila_tracts_ages, file = paste0(path_onedrive,"phila_tracts_ages.Rdata"))
 
 # Sexes and years for crosswalks
-sexes <- c("Male", "Female")
+sexes <- c("Men", "Women")
 years <- years_cross$years %>% unique
 
 # Crosswalk of all ages x tracts x sexes x years
@@ -163,7 +163,7 @@ sex_years <- phila_tracts_ages_sexes_years %>%
   group_by(sex, years) %>%
   summarise(sex_years = cur_group_id()) %>%
   mutate(sex_years_lab = paste0(sex, " ", years) %>%
-           factor(levels = c("Male 2006-2010", "Male 2011-2015", "Male 2016-2020", "Female 2006-2010", "Female 2011-2015", "Female 2016-2020")))
+           factor(levels = c("Men 2017-2019", "Men 2020-2022", "Women 2017-2019", "Women 2020-2022")))
 
 # Save crosswalk for later use
 save(sex_years, file = paste0(path_onedrive,'sex_years.Rdata'))

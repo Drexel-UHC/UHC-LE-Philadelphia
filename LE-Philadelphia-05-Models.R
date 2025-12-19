@@ -13,6 +13,7 @@ library(classInt)
 
 # Create variable to house directory paths
 results <- "Results/"
+working_results <- paste0(results, "Working Results/")
 dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
 path_onedrive <- "Data - Cleansed/"
 
@@ -138,8 +139,8 @@ nimble_results_seer <- future_map(c(1,2,3,4), function(sex_years_var, .options=f
       constants = nimble_constants,
       inits = inits,
       monitors = parameters, 
-      niter = 20000,
-      nburnin = 10000,
+      niter = 50000,
+      nburnin = 25000,
       thin = 10)
 
     list(output=nimble_output)
@@ -150,7 +151,7 @@ nimble_results_seer <- future_map(c(1,2,3,4), function(sex_years_var, .options=f
 nimble_end <- Sys.time()
 
 # Print time to run nimble models
-cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \n') # Nimble models took  2.264729  hours to run.
+cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \n') # Nimble models took  2.264729  hours to run. 
 
 # End parallel processing
 plan(sequential)
@@ -211,8 +212,7 @@ thetas_med_ci <- lambdas_nimble %>%
          rug = case_when(
            deaths == 0 ~ age,
            TRUE ~ NA_real_)) %>%
-  ungroup() %>%
-  mutate(fisher=cut(round(exp(med)*100000), breaks=classIntervals(round(exp(med)*100000),n=6,style="fisher")$brks,include.lowest=T, dig.lab = 10))
+  ungroup()
 
 # Free unused memory and save results for later use
 gc(); save(thetas_med_ci, file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'))
@@ -236,9 +236,12 @@ lambda_convergence <- lambdas_nimble %>%
   })
 
 # Save as PDF
-pdf(file = paste0(working_results,"lambda_convergence_20251028.pdf"))
+pdf(file = paste0(working_results,"lambda_convergence_20250117.pdf"))
 lambda_convergence
 dev.off()
+
+# Remove from global environment and free unused memory
+rm(lambda_convergence); gc()
 
 # Density plots
 lambda_density <- lambdas_nimble %>%
@@ -252,37 +255,81 @@ lambda_density <- lambdas_nimble %>%
       ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
   })
 
+# Save as PDF
+pdf(file = paste0(working_results,"lambda_density_20250117.pdf"))
+lambda_density
+dev.off()
+
+# Remove from global environment and free unused memory
+rm(lambda_density); gc()
+
 
 # Life Expectancy ---------------------------------------------------------
+
+# Clear global environment and free unused memory
+rm(list=ls()); gc()
+
+# Filepath
+path_onedrive <- "Data - Cleansed/"
 
 # Load lambdas created above
 load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
 
+# Splitting lambdas to send a smaller amount to each core. Because we have 2 time periods for men and women, we can send each combination to a separate core
+lambdas_split <- lambdas_nimble %>%
+  group_split(sex_years)
+
+names(lambdas_split) <- unique(lambdas_nimble$sex_years)
+
+# Remove original lambdas dataframe from global environment and clear memory
+rm(lambdas_nimble); gc()
+
 # Start time of lifetable calcs
 le_start <- Sys.time()
 
-# Run lifetables
-le_nimble  <- lambdas_nimble %>%
-  group_by(GEOID, sex_years, iteration) %>% 
-  group_map(~{
-    ages<-as.numeric(.x$age)
-    rates<-as.numeric(.x$rate)
-    lt <- lt_single_mx(nMx=rates, Age= ages) %>% 
-      mutate(GEOID = .y$GEOID, sex_years = .y$sex_years, iteration = .y$iteration) %>%
-      select(c("Age", "ex", "GEOID", "sex_years", "iteration"))
-  })
+# Start parallel processing - change if you want to use a different number of cores
+plan(multisession, .cleanup = T, workers = 4); gc()
+
+# Parallel processing of lifetable construction
+le_nimble <- future_map(
+  lambdas_split,
+  function(df) {
+    df %>%
+      group_by(GEOID, iteration) %>%
+      group_map(~{
+        ages  <- as.numeric(.x$age)
+        rates <- as.numeric(.x$rate)
+        
+        lt_single_mx(nMx = rates, Age = ages) %>%
+          mutate(
+            GEOID     = .y$GEOID,
+            iteration = .y$iteration,
+            sex_years = unique(.x$sex_years)
+          ) %>%
+          select(Age, ex, GEOID, sex_years, iteration)
+      })
+  },
+  .options = furrr_options(seed = TRUE),
+  .progress = TRUE
+)
 
 # End time of lifetable calcs
 le_end <- Sys.time()
 
 # Print time to run lifetables
-cat("Nimble models took ", difftime(le_end, le_start), ' hours to run. \n') # Time difference of 13.26059 hours
+cat("Nimble models took ", difftime(le_end, le_start), ' hours to run. \n') # Nimble models took  2.902934  hours to run.
+
+# End parallel processing
+plan(sequential)
 
 # Free unused memory and save results for later use
 gc(); save(le_nimble,file=paste0(path_onedrive, "le_nimble_20250117.Rdata"))
 
+# Load crosswalk
+load(file = paste0(path_onedrive,'sex_years.Rdata'))
+
 # Dataframe of LE by iteration
-le_iter_nimble <- tibble(do.call(rbind,le_nimble)) %>%
+le_iter_nimble <- tibble(do.call(rbind,do.call(rbind,le_nimble))) %>%
   rename(le = ex) %>%
   inner_join(sex_years) %>%
   select(GEOID, iteration, Age, sex, years, le) %>%

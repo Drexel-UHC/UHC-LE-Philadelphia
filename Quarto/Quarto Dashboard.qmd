@@ -1,0 +1,366 @@
+---
+title: "A Bayesian Approach to Estimating Changes in Small Area Life Expectancy Disparities in Philadelphia"
+format: 
+  html:
+    toc: false
+    toc-expand: false
+    self-contained: true
+    code-fold: false
+    df-print: kable
+    code-tools: true
+    code-block-border-left: '#39b69d'
+    code-block-bg: '#ebf0ef'
+    page-layout: full
+editor: source
+---
+
+# Interactive Results
+
+::: {.panel-tabset}
+
+## Maps
+
+```{r}
+#| label: maps
+#| echo: true
+#| code-fold: true
+#| output: false
+#| warning: false
+#| message: false
+
+# Suppress warnings and messages globally
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE
+)
+
+# Load libraries
+library(tidyverse)
+library(sf)
+library(tmap)
+library(RColorBrewer)
+library(highcharter)
+library(classInt)
+
+# Interactive mode for maps
+tmap_mode("view")
+
+# Load data
+load("Data/le_birth.Rdata")
+load("Data/le_change_sf.Rdata")
+load("Data/post_prob_sf.Rdata")
+load("Data/le_by_decile.Rdata")
+
+# Convert data to sf
+le_birth_sf <- st_as_sf(le_birth)
+
+# Function to create maps
+make_maps <- function(sex_input, yr_input, measure) {
+  
+  # LE at birth maps
+  if (measure == "Life Expectancy at Birth") {
+    
+    # Prep data
+    d <- le_birth_sf %>% filter(sex == sex_input, years == yr_input) %>%
+      mutate(val = round(med,2),
+             popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
+             GEOID_str = as.character(GEOID))
+    
+    # Compute Jenks breaks for LE at birth
+    n_breaks <- 5
+    breaks <- classIntervals(d$val, n = n_breaks, style = "jenks")$brks
+    
+    # Color palette 
+    pal <- brewer.pal(n_breaks,"Blues")
+    
+    # Legend title
+    legend <- "LE (Years)"
+    
+    # Polygon fill settings
+    scale <- tm_scale_intervals(style = "fixed", 
+                                breaks = breaks,
+                                label.format = list(text.separator = "to"),
+                                values = pal,
+                                label.na = "NA") 
+    # Change in LE at birth maps
+  } else if (measure == "Change in LE") {
+    
+    # Prep data
+    d <- le_change_sf %>% filter(sex == sex_input) %>%
+      mutate(val = round(med,2),
+             popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
+             GEOID_str = as.character(GEOID))
+    
+    # Compute Jenks breaks for change in LE at birth
+    n_breaks <- 5
+    breaks <- classIntervals(d$val, n = n_breaks, style = "jenks")$brks
+    
+    # Color palette
+    pal <- colorRampPalette(c("red","white","green"))(n_breaks)
+    
+    # Legend title
+    legend <- "Change in LE (Years)"
+    
+    # Polygon fill settings
+    scale <- tm_scale_intervals(style = "fixed",
+                                breaks = breaks,
+                                label.format = list(text.separator = "to"),
+                                values = pal,
+                                label.na = "NA")
+    # Posterior probability maps
+  } else {
+    
+    # Prep data
+    d <- post_prob_sf %>% 
+      filter(sex == sex_input) %>%
+      mutate(val = round(prob_decr,2), 
+             popup = paste0(round(prob_decr,1),"%"),
+             GEOID_str = as.character(GEOID))
+    
+    # Color palette
+    pal <- brewer.pal(7,"RdBu")[7:1]
+    
+    # Legend title
+    legend <- "Posterior Probability"
+    
+    # Polygon fill settings
+    scale <- tm_scale_intervals(style = "fixed", 
+                                breaks = c(0, 5, 10, 25, 75, 90, 95, 100),
+                                label.format = list(text.separator = "to"),
+                                values = pal,
+                                label.na = "NA")
+  }
+
+  # Create maps
+  tm_shape(d) +
+  tm_polygons(
+    fill = "val",
+    fill.scale = scale,
+    popup.vars = c("GEOID" = "GEOID_str", legend = "popup"),
+    fill.legend = tm_legend(title = legend)
+  ) +
+  tm_borders() +
+  tm_layout(
+    inner.margins = 0,
+    legend.position = c("right","bottom")
+  ) +
+  tmap_options(show.messages = FALSE)
+}
+
+```
+
+### Life Expectancy at Birth
+
+These maps show median life expectancy at birth (and 95% credible intervals) for each census tract in Philadelphia. 
+
+```{r}
+#| label: le_maps
+#| echo: true
+#| warning: false
+#| message: false
+#| code-fold: true
+#| output: true
+#| cache: false
+
+tmap_arrange(
+make_maps("Men", "2017-2019", "Life Expectancy at Birth"),
+make_maps("Men", "2020-2022", "Life Expectancy at Birth"),
+make_maps("Women", "2017-2019", "Life Expectancy at Birth"),
+make_maps("Women", "2020-2022", "Life Expectancy at Birth"),
+ncol = 2
+)
+```
+
+### Change in Life Expectancy at Birth
+
+These maps show median change in life expectancy at birth from 2017---2019 to 2020---2022 (and 95% credible intervals) for each census tract in Philadelphia. 
+
+```{r}
+#| label: le_change_maps
+#| echo: true
+#| warning: false
+#| message: false
+#| code-fold: true
+#| output: true
+#| cache: false
+
+tmap_arrange(
+make_maps("Men", NULL, "Change in LE"),
+make_maps("Women", NULL, "Change in LE"),
+ncol = 2
+)
+```
+
+### Posterior Probability of a Decrease in Life Expectancy at Birth
+
+These maps show the posterior probability of a decrease in life expectancy at birth from 2017---2019 to 2020---2022 for each census tract in Philadelphia. 
+
+```{r}
+#| label: post_prob_maps
+#| echo: true
+#| warning: false
+#| message: false
+#| code-fold: true
+#| output: true
+#| cache: false
+
+tmap_arrange(
+make_maps("Men", NULL, "Posterior Probability"),
+make_maps("Women", NULL, "Posterior Probability"),
+ncol = 2
+)
+```
+
+## Life Expectancy by Deciles of Median Household Income
+
+```{r}
+#| label: decile_plots
+#| echo: true
+#| code-fold: true
+#| output: false
+
+# Load highcharter library
+library(highcharter)
+
+# Load data
+load("Data/le_by_decile.Rdata")
+  
+# Function to create plots
+make_decile_plot_hc <- function(statistic, age_input, yr_input) { 
+  
+  # Filter data 
+  filtered_data <- le_by_decile %>%
+    filter(Age == age_input, years == yr_input)
+  
+  # Select variables based on statistic
+  if (statistic == "Mean") { 
+    yvar <- "le"
+    lci  <- "le_lci"
+    uci  <- "le_uci"
+    ylab <- "Mean LE"
+  } else { 
+    yvar <- "sd"
+    lci  <- "sd_lci"
+    uci  <- "sd_uci"
+    ylab <- "SD of LE"
+  }
+  
+  # Text for tooltip
+  filtered_data <- filtered_data %>%
+    mutate(
+      tooltip_str = paste0(
+        round(.data[[yvar]], 2),
+        " (",
+        round(.data[[lci]], 2),
+        ", ",
+        round(.data[[uci]], 2),
+        ")"
+      )
+    )
+
+  # Colors
+  colors <- c("Men" = "#1f77b4", "Women" = "#ff7f0e") 
+  
+  # Create plot using highcharter
+  hc <- highchart() |> 
+    hc_chart(type = "line") |> 
+    hc_title(text = paste0(ylab, " by Income Decile in Philadelphia (", yr_input, ")")) |> 
+    hc_xAxis(categories = 1:10, title = list(text = "Income Decile")) |> 
+    hc_yAxis(title = list(text = ylab)) |> 
+    hc_tooltip(
+      shared = TRUE,
+      useHTML = TRUE,
+      headerFormat = paste0("<b>", ylab, " in Decile {point.x}</b><br>"),      
+      pointFormat =
+        "<span style='color:{series.color}'>{series.name}</span>: 
+         <b>{point.tooltip}</b><br/>"
+    ) |> 
+    hc_plotOptions( 
+      line = list(marker = list(enabled = TRUE)), 
+      arearange = list(
+        lineWidth = 0,
+        enableMouseTracking = FALSE,
+        fillOpacity = 0.4,
+        marker = list(enabled = FALSE)
+      )
+    )
+
+  # Plot lines and credible intervals
+  for (sx in c("Men", "Women")) {
+    
+    # Filter data
+    d <- filtered_data %>% filter(Sex == sx)
+    
+    # Update plot
+    hc <- hc |>
+      # Line (central estimate)
+      hc_add_series(
+        data = d,
+        type = "line",
+        hcaes(
+          x = decile_income,
+          y = .data[[yvar]],
+          tooltip = tooltip_str
+        ),
+        name = sx,
+        color = colors[sx]
+      ) |>
+      # CI ribbon
+      hc_add_series(
+        data = d,
+        type = "arearange",
+        hcaes(
+          x = decile_income,
+          low = .data[[lci]],
+          high = .data[[uci]]
+        ),
+        color = colors[sx],
+        showInLegend = FALSE
+      )
+  }
+  hc
+}
+
+
+```
+
+### Mean Life Expectancy at Birth by Income Decile
+
+These plots depict mean life expectancy at birth by deciles of median household income.
+
+```{r}
+#| label: le_decile_mean_plots
+#| echo: true
+#| warning: false
+#| message: false
+#| code-fold: true
+#| output: true
+#| cache: false
+#| layout-ncol: 2
+
+make_decile_plot_hc("Mean", 0, "2017-2019")
+make_decile_plot_hc("Mean", 0, "2020-2022")
+
+```
+
+### Standard Deviation of Life Expectancy at Birth by Income Decile
+
+These plots depict the standard deviation of life expectancy at birth by deciles of median household income.
+
+```{r}
+#| label: le_decile_sd_plots
+#| echo: true
+#| warning: false
+#| message: false
+#| code-fold: true
+#| output: true
+#| cache: false
+#| layout-ncol: 2
+
+make_decile_plot_hc("Standard Deviation", 0, "2017-2019")
+make_decile_plot_hc("Standard Deviation", 0, "2020-2022")
+
+```
+
+:::
+
