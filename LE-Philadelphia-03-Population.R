@@ -58,7 +58,18 @@ phila_pop_age_sex <- function(df) {
 # Replace with your own SEER URL after requesting access for data at https://seer.cancer.gov/censustract-pops/request.html
 seer_url <- ""
 
-download.file(seer_url, destfile = paste0(data,"seer_tract_pop.txt.gz"), mode = "wb")
+seer_destfile <- paste0(data, "seer_tract_pop.txt.gz")
+
+# Only attempt download if a non-empty URL is provided; otherwise rely on an existing local file
+if (nzchar(seer_url)) {
+  download.file(seer_url, destfile = seer_destfile, mode = "wb")
+} else if (!file.exists(seer_destfile)) {
+  stop(
+    "SEER population file not found at '", seer_destfile,
+    "'. Please request access at https://seer.cancer.gov/censustract-pops/request.html, ",
+    "set 'seer_url' to the download URL, or manually place the file at this path."
+  )
+}
 
 # SEER population by sex x tract x age group
 phila_pop_age_grp_seer <- read_lines("./Data/seer_tract_pop.txt.gz") %>% # Old: us.2006_2022.tract.level.pops.txt
