@@ -262,7 +262,7 @@ le_iter <- le_iter_nimble %>%
       TRUE ~ le))
 
 # Save for later use
-save(le_iter, file=paste0(path_onedrive, "le_iter.R"))
+save(le_iter, file=paste0(path_onedrive, "le_iter.Rdata"))
 
 # LE by iteration with MHI deciles - sensitivity analysis
 le_iter_sensitivity <- le_iter_nimble %>%
@@ -274,7 +274,7 @@ le_iter_sensitivity <- le_iter_nimble %>%
       TRUE ~ le))
 
 # Save for later use
-save(le_iter_sensitivity, file=paste0(path_onedrive, "le_iter_sensitivity.R"))
+save(le_iter_sensitivity, file=paste0(path_onedrive, "le_iter_sensitivity.Rdata"))
 
 # Change in LE by iteration - main analysis
 le_iter_change <- le_iter_nimble %>%
@@ -349,7 +349,7 @@ le_birth_post_prob_dec <- le_iter_change %>%
       TRUE ~ prob_decr))
 
 # Save for later use
-save(le_birth_post_prob_dec, file=paste0(path_onedrive, "le_birth_post_prob_dec.R"))
+save(le_birth_post_prob_dec, file=paste0(path_onedrive, "le_birth_post_prob_dec.Rdata"))
 
 # Take average over tracts of posterior probabilities 
 le_birth_post_prob_dec_summary <- le_birth_post_prob_dec %>%
@@ -395,7 +395,7 @@ save(le_iter_change_deciles_sensitivity, file = paste0(path_onedrive, "le_iter_c
 
 #Load LE data created in 03-Population and 05-Models
 load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(file=paste0(path_onedrive, "le_iter.R"))
+load(file=paste0(path_onedrive, "le_iter.Rdata"))
 
 # Absolute disparities
 abs_ineq_long <- le_iter %>%
@@ -499,7 +499,7 @@ write.csv(summary_time_disparities_table, paste0(working_results,"summary_time_d
 load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
 
 # Load iteration-level LE and changes in LE by deciles created above
-load(file=paste0(path_onedrive, "le_iter.R")); gc()
+load(file=paste0(path_onedrive, "le_iter.Rdata")); gc()
 
 # Find the top/bottom ratio and top/bottom difference for LE using MHI deciles - main analysis
 decile_le <- le_iter %>%
@@ -533,7 +533,7 @@ decile_le_change <- le_iter_change_deciles %>%
 rm(le_iter_change_deciles); gc()
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
+load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # Find the top/bottom ratio and top/bottom difference using MHI deciles - sensitivity analysis
 decile_le_sensitivity <- le_iter_sensitivity %>%
@@ -588,7 +588,7 @@ summary_income_sensitivity <- decile_le_sensitivity %>%
 # RII - Relative Index of Inequality - SII rel. to avg. health in the population
 
 # Load iteration-level LE and changes in LE by deciles created above
-load(file=paste0(path_onedrive, "le_iter.R")); gc()
+load(file=paste0(path_onedrive, "le_iter.Rdata")); gc()
 
 # SII/RII - main analysis
 income_ineq_v2 <- le_iter %>%
@@ -626,7 +626,7 @@ income_ineq_v2_change <- le_iter_change_deciles %>%
 rm(le_iter_change_deciles); gc()
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
+load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # SII/RII - sensitivity analysis
 income_ineq_v2_sensitivity <- le_iter_sensitivity %>%
@@ -767,7 +767,7 @@ rm(le_iter); gc()
 save(le_by_decile, file = "Quarto/Data/le_by_decile.Rdata")
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.R")); gc()
+load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # LE by Decile for sensitivity analysis
 le_by_decile_sensitivity <- le_iter_sensitivity %>%
@@ -1072,7 +1072,7 @@ tmap_save(le_maps, filename = paste0(main_text,"figure2.png"),
 
 # Load data created above
 load(file = "Quarto/Data/le_birth_change.Rdata")
-load(file=paste0(path_onedrive, "le_birth_post_prob_dec.R"))
+load(file=paste0(path_onedrive, "le_birth_post_prob_dec.Rdata"))
 
 # Change in LE at birth maps
 le_change_sf <- le_birth_change %>%
