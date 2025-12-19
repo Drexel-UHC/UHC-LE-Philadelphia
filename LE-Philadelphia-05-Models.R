@@ -317,7 +317,7 @@ le_nimble <- future_map(
 le_end <- Sys.time()
 
 # Print time to run lifetables
-cat("Nimble models took ", difftime(le_end, le_start), ' hours to run. \n') # Nimble models took  2.902934  hours to run.
+cat("Lifetable calculations took ", difftime(le_end, le_start), ' hours to run. \n') # Lifetable calculations took  2.902934  hours to run.
 
 # End parallel processing
 plan(sequential)
