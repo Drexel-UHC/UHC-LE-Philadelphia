@@ -32,7 +32,7 @@ age_limit <- 85
 
 # Columns we need for death files
 keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", # "geoid10", "year", "race1215", "race9011", 
-                "Age_death", "DOD", "RACE1215", 
+                "Age_death", "RACE1215", 
                 "HISPANIC")
 
 # Create dataframe of Pennsylvania deaths
@@ -41,12 +41,7 @@ deaths <- data.frame()
 for(i in 2017:2022) {
   current_data <- read_csv(paste0(dir_name, "deathgeo", i, ".csv")) %>%
     select(one_of(keep_death)) %>%
-    mutate(year = i,
-           DOD = case_when(
-             str_detect(DOD, "^\\d{8}$") ~ mdy(DOD),   # mmddyyyy
-             str_detect(DOD, "/")        ~ mdy(DOD),   # mm/dd/yyyy
-             TRUE                        ~ NA_Date_
-           )) %>%
+    mutate(year = i) %>%
     rename(GEOID = GEOID10)
 
   deaths <- bind_rows(deaths, current_data)
@@ -308,7 +303,6 @@ sum((phila_death_counts_nolow_age_grp%>%filter(GEOID %in% low_pop))$deaths) # 0
 philadelphia_nogeo <- nrow(filter(phila_deaths, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11))
 philadelphia_total <- nrow(phila_deaths)
 philadelphia_nogeo/philadelphia_total*100 # 100
-100 - philadelphia_nogeo_pct # 0
 
 # Save data (to encrypted drive)
 save(phila_death_counts, 

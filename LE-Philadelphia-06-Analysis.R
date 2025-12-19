@@ -1154,60 +1154,6 @@ for (i in unique(le_change_sf$sex)) {
     )
 }
 
-
-# Create maps for all sex x period combinations
-# for (i in unique(le_change_sf$sex)) {
-#   
-#   # Filter le change data
-#   data_i <- le_change_sf %>% filter(sex == i)
-#   
-#   # Map numerical value of change
-#   le_change_maps_list[[i]] <- tm_shape(data_i) + 
-#     tm_borders(lwd = 0.5) +
-#     tm_polygons(
-#       fill = "med", 
-#       fill.scale = tm_scale_intervals(style = "jenks", 
-#                                       values = colorRampPalette(c("red", "white", "green"))(5),
-#                                       label.format = list(
-#                                         text.separator = "to"),
-#                                       label.na = "NA"), 
-#       fill.legend = tm_legend(title = "Change in LE \nat Birth (Years)"),
-#       id = "GEOID") +
-#     tm_title(i) +
-#     tm_layout(
-#       title.position = c('center', 'top'),
-#       title.size = 2,
-#       inner.margins = c(0.02, 0.02, 0.02, 0.25),
-#       legend.position = c('right', 'bottom'), 
-#       legend.title.size = 1.4, 
-#       legend.text.size = 1.4)
-#   
-#   # Filter posterior probability data 
-#   post_prob_i <- post_prob_sf %>% filter(sex == i)
-#   
-#   # Maps of posterior probability of a decrease in LE in each census tract
-#   post_prob_maps_list[[i]] <- tm_shape(post_prob_i) + 
-#     tm_borders(lwd = 0.5) +
-#     tm_polygons(
-#       fill = "prob_decr", 
-#       fill.scale = tm_scale_intervals(style = "fixed", 
-#                                       breaks = c(0, 5, 10, 25, 75, 90, 95, 100),
-#                                       values = brewer.pal(7, "RdBu")[7:1], 
-#                                       label.format = list(text.separator = "to"),
-#                                       label.na = "NA"), 
-#       fill.legend = tm_legend(title = "Posterior Probability \nof Decrease in LE (%)"),
-#       id = "GEOID") +
-#     tm_title(i) +
-#     tm_layout(
-#       title.position = c('center', 'top'),
-#       title.size = 2,
-#       inner.margins = c(0.02, 0.02, 0.02, 0.25),
-#       legend.position = c('right', 'bottom'), 
-#       legend.title.size = 1.4, 
-#       legend.text.size = 1.4)
-#   
-# }
-
 # Put maps together
 le_change_post_prob_maps_list <- c(le_change_maps_list, post_prob_maps_list)[c(1,3,2,4)]
 le_change_post_prob_maps <- tmap_arrange(le_change_post_prob_maps_list, 
@@ -1394,7 +1340,7 @@ phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
 
 # Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
 load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(file = paste0(path_onedrive, "mhi.Rdata"))
+load(file = paste0(path_onedrive, "mhi_sensitivity.Rdata"))
 
 #Get average and sd of mhi for Philadelphia
 weighted_mhi_phila <- mhi_sensitivity %>%
