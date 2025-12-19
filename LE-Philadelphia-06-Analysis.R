@@ -82,7 +82,7 @@ le_summary <- le_birth %>%
             le_P10 = round(quantile(med, 0.1, na.rm=T),2),
             le_P90 = round(quantile(med, 0.9, na.rm=T),2))
 
-# Median/10th and 90th decile income across tracts
+# Median/10th and 90th percentile of change in life expectancy across tracts
 le_change_summary <- le_birth %>%
   pivot_wider(names_from = years, values_from = med, values_fill = 0) %>%
   group_by(GEOID, sex) %>%
