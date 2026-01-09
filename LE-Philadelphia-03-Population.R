@@ -3,9 +3,12 @@
 
 rm(list=ls())
 library(tidyverse)
-library(demotools)
+library(DemoTools)
+library(readr)
+library(sf)
 
 # Create variable to house directory paths
+data <- "Data/"
 results <- "Results/"
 working_results <- paste0(results, "Working Results/")
 main_text <- paste0(results, "Main Text/")
@@ -52,37 +55,50 @@ phila_pop_age_sex <- function(df) {
 }
 
 # Load SEER population estimates 
-load(paste0(path_onedrive, "pop_tract_philly.Rdata"))
-dta_us_age_grp_5 <- fread("./Data/us.2006_2022.tract.level.pops.txt")
+# Replace with your own SEER URL after requesting access for data at https://seer.cancer.gov/censustract-pops/request.html
+seer_url <- ""
+
+seer_destfile <- paste0(data, "seer_tract_pop.txt.gz")
+
+# Only attempt download if a non-empty URL is provided; otherwise rely on an existing local file
+if (nzchar(seer_url)) {
+  download.file(seer_url, destfile = seer_destfile, mode = "wb")
+} else if (!file.exists(seer_destfile)) {
+  stop(
+    "SEER population file not found at '", seer_destfile,
+    "'. Please request access at https://seer.cancer.gov/censustract-pops/request.html, ",
+    "set 'seer_url' to the download URL, or manually place the file at this path."
+  )
+}
 
 # SEER population by sex x tract x age group
-phila_pop_age_grp_seer <- read_lines("./Data/us.2006_2022.tract.level.pops.txt") %>%
+phila_pop_age_grp_seer <- read_lines("./Data/seer_tract_pop.txt.gz") %>% # Old: us.2006_2022.tract.level.pops.txt
   enframe(name = NULL, value = "data") %>%
-  mutate(state = substr(data, 5, 6)) %>%
-  filter(state == "PA") %>%
+  mutate(state = substr(data, 5, 6),
+         stateFIPS = substr(data, 7, 8),
+         countyFIPS = substr(data, 9, 11),
+         tract = substr(data, 12, 17),
+         GEOID = as.numeric(paste0(stateFIPS, countyFIPS, tract))) %>%
+  filter(GEOID %in% phila_tracts) %>%
   mutate(
-    year = substr(data, 1, 4),
+    year = as.integer(substr(data, 1, 4)),
     years = case_when(
       year >= 2017 & year <= 2019 ~ "2017-2019",
       year >= 2020 & year <= 2022 ~ "2020-2022"
     ),
-    stateFIPS = substr(data, 7, 8),
-    countyFIPS = substr(data, 9, 11),
-    tract = substr(data, 12, 17),
-    GEOID = as.numeric(paste0(stateFIPS, countyFIPS, tract)),
     sex = substr(data, 19,19),
     age = as.numeric(substr(data, 20, 21)),
     pop = as.numeric(substr(data, 22, 30))/10000) %>%
-  filter(year >= 2017 & year <= 2022, GEOID %in% phila_tracts) %>%
+  filter(year >= 2017 & year <= 2022) %>%
   select(GEOID, years, sex, age, pop) %>%
   mutate(
     sex = case_when(
-      sex == 1 ~ "Male",
-      sex == 2 ~ "Female") %>% as.factor,
+      sex == 1 ~ "Men",
+      sex == 2 ~ "Women") %>% as.factor,
     age_grp_5 = case_when(
       age == 0 ~ 0,
-      age == 1 ~ 0, 
-      age == 2 ~ 5, 
+      age == 1 ~ 0,
+      age == 2 ~ 5,
       age == 3 ~ 10,
       age == 4 ~ 15,
       age == 5 ~ 20,
@@ -105,7 +121,7 @@ phila_pop_age_grp_seer <- read_lines("./Data/us.2006_2022.tract.level.pops.txt")
   complete(GEOID, age_grp_5, years, sex, fill = list(pop = 0)) %>%
   filter(!is.na(pop), !is.na(age_grp_5)) %>%
   group_by(GEOID, age_grp_5, years, sex) %>%
-  summarise(pop = sum(pop))
+  summarise(pop = sum(pop)); gc()
 
 #Checks
 phila_pop_age_grp_seer$GEOID %>% unique %>% length # 384
@@ -113,16 +129,13 @@ nrow(phila_pop_age_grp_seer) # 27,648
 N_tracts*18*2*2 # 27,648
 
 # Total SEER population by age group
-sum(phila_pop_age_grp_seer$pop) # 9,565,508
+sum(phila_pop_age_grp_seer$pop) # Old: 9,565,508, New: 9,495,886
 
 # Total SEER population in tracts to be excluded
-sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # 54,689.67
+sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # Old: 54,689.67, New: 53,354.81
 
 # Total SEER population by age group in tracts to be included
-sum(phila_pop_age_grp_seer$pop) - sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # 9,510,818
-
-# Remove data and free up memory
-rm(dta_us_age_grp_5); gc()
+sum(phila_pop_age_grp_seer$pop) - sum((phila_pop_age_grp_seer %>% filter(GEOID %in% low_pop))$pop) # Old: 9,510,818, New: 9,442,531
 
 # SEER population by single-year age group
 phila_pop_age_seer <- phila_pop_age_grp_seer %>%
@@ -139,7 +152,7 @@ phila_pop_age_seer <- phila_pop_age_grp_seer %>%
   summarise(pop = sum(pop))
 
 # Total SEER population by single-year age group
-sum(phila_pop_age_seer$pop) # 9,565,530
+sum(phila_pop_age_seer$pop) # Old: 9,565,530, New: 9,495,973
 
 # Checks
 phila_pop_age_seer$GEOID %>% unique %>% length # 384
@@ -147,7 +160,7 @@ nrow(phila_pop_age_seer) # 132,096
 N_tracts*86*2*2 # 132,096
 
 # Difference between total SEER population by age group and single-year age group
-sum(phila_pop_age_grp_seer$pop) - sum(phila_pop_age_seer$pop) # -21.88294
+sum(phila_pop_age_grp_seer$pop) - sum(phila_pop_age_seer$pop) # Old: -21.88294, New: -86.64896
 
 # Total population by census tract x years
 phila_pop_seer_total <- phila_pop_age_grp_seer %>%
@@ -155,7 +168,7 @@ phila_pop_seer_total <- phila_pop_age_grp_seer %>%
   summarise(pop=sum(pop)) %>%
   inner_join(phila_sf_cross) %>%
   arrange(years, tract)
-sum(phila_pop_seer_total$pop) # 9,565,508
+sum(phila_pop_seer_total$pop) # Old: 9,565,508, New: 9,495,886
 
 # Zero out population from UHC-identified tracts
 phila_pop_seer_age_grp_no_low <- phila_pop_age_grp_seer %>%
@@ -164,10 +177,10 @@ phila_pop_seer_age_grp_no_low <- phila_pop_age_grp_seer %>%
       TRUE ~ pop))
 
 # Total SEER population by age group after zeroing out low-population tracts
-sum(phila_pop_seer_age_grp_no_low$pop) # 9,510,818
+sum(phila_pop_seer_age_grp_no_low$pop) # Old: 9,510,818, New: 9,442,531
 
 # How many people have we zeroed out?
-sum(phila_pop_age_grp_seer$pop) - sum(phila_pop_seer_age_grp_no_low$pop) # 54,689.67
+sum(phila_pop_age_grp_seer$pop) - sum(phila_pop_seer_age_grp_no_low$pop) # Old: 54,689.67, New: 53,354.81
 
 # SEER population by age group, no population in UHC-identified tracts, 
 # non-structural zeros adjusted
@@ -202,13 +215,13 @@ phila_pop_seer_age_grp_no_low %>%
   sum(na.rm = TRUE)
 
 # Total SEER population by age group after adjustments
-sum(phila_pop_age_grp_seer_all_fixes$pop) # 9,511,225
+sum(phila_pop_age_grp_seer_all_fixes$pop) # Old: 9,511,225, New: 9,442,978
 
 # How many additional people have we added?
-sum(phila_pop_age_grp_seer_all_fixes$pop) - sum(phila_pop_seer_age_grp_no_low$pop) # 406.5494
+sum(phila_pop_age_grp_seer_all_fixes$pop) - sum(phila_pop_seer_age_grp_no_low$pop) # Old: 406.5494, New: 446.3977
 
 # Do we have any people in UHC-identified tracts?
-sum((phila_pop_age_grp_seer_all_fixes%>%filter(GEOID %in% low_pop))$pop) # 0 
+sum((phila_pop_age_grp_seer_all_fixes%>%filter(GEOID %in% low_pop))$pop) # Old: 0, New: 0
 
 # Total SEER population by census tract x years after adjustments
 phila_pop_seer_total_all_fixes <- phila_pop_age_grp_seer_all_fixes %>%
@@ -216,7 +229,7 @@ phila_pop_seer_total_all_fixes <- phila_pop_age_grp_seer_all_fixes %>%
   summarise(pop=sum(pop)) %>%
   inner_join(phila_sf_cross) %>%
   arrange(years, tract)
-sum(phila_pop_seer_total_all_fixes$pop) # 9,511,225
+sum(phila_pop_seer_total_all_fixes$pop) # Old: 9,511,225, New: 9,442,978
 
 # Graduate adjusted age group population to get adjusted population by single-year age group
 phila_pop_age_seer_all_fixes <- phila_pop_age_grp_seer_all_fixes %>%
@@ -241,13 +254,13 @@ nrow(phila_pop_age_seer_all_fixes) # 132,096
 N_tracts*2*2*86 # 132,096
 
 # Total single-year age group population after adjustments
-sum(phila_pop_age_seer_all_fixes$pop) # 9,511,239
+sum(phila_pop_age_seer_all_fixes$pop) # Old: 9,511,239, New: 9,443,057
 
 # Total age group population after adjustments
-sum(phila_pop_age_grp_seer_all_fixes$pop) # 9,511,225
+sum(phila_pop_age_grp_seer_all_fixes$pop) # Old: 9,511,225, New: 9,442,978
 
 # How many additional people have we added?
-sum(phila_pop_age_seer_all_fixes$pop) - sum(phila_pop_age_grp_seer_all_fixes$pop) # 14.16606
+sum(phila_pop_age_seer_all_fixes$pop) - sum(phila_pop_age_grp_seer_all_fixes$pop) # Old: 14.16606, New: 79.15564
 
 # Total SEER population by census tract x sex x years after adjustments
 phila_pop_seer_tract_sex_total_all_fixes <- phila_pop_age_seer_all_fixes %>%
@@ -267,11 +280,17 @@ phila_pop_seer_total_all_fixes <- phila_pop_age_seer_all_fixes %>%
            TRUE ~ "Populated"))
 
 # Map areas with no population
-phila_pop_seer_no_pop_maps <- inner_join(phila_pop_seer_total_all_fixes, phila_sf) %>%
+phila_pop_seer_no_pop_maps <- 
+  st_as_sf(as.data.frame(phila_sf)) %>% 
+  inner_join(phila_pop_seer_total_all_fixes, by = "GEOID") %>%
   ggplot(aes(fill = no_pop_type)) +
-  geom_sf(aes(geometry = geometry)) +
-  scale_fill_manual(values = c("No Population - Expected" = "orange","No Population - Unexpected" = "red", "Populated" = "white")) +
-  facet_wrap(~years)+
+  geom_sf() +
+  scale_fill_manual(values = c(
+    "No Population - Expected" = "orange",
+    "No Population - Unexpected" = "red",
+    "Populated" = "white"
+  )) +
+  facet_wrap(~years) +
   theme_void() +
   theme(legend.position = "bottom")
 phila_pop_seer_no_pop_maps

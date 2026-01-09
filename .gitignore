@@ -30,3 +30,6 @@ plot_mcmc.R
 /Old/
 /Data/ltdb_ct20toct10_xwalk_files/
 /Data/us.2006_2022.tract.level.pops.txt
+/Data/us.2006_2023.tract.level.pops.txt
+/Data/seer_tract_pop.txt.gz
+/Quarto/Quarto Dashboard.html

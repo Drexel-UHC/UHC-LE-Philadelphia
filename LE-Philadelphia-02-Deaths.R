@@ -31,9 +31,9 @@ age_limit <- 85
 # Death Data --------------------------------------------------------------
 
 # Columns we need for death files
-keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", "geoid10",
-                "year", "Age_death", "DOD", "race1215", "RACE1215", 
-                "race9011", "HISPANIC")
+keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", # "geoid10", "year", "race1215", "race9011", 
+                "Age_death", "RACE1215", 
+                "HISPANIC")
 
 # Create dataframe of Pennsylvania deaths
 deaths <- data.frame()
@@ -41,54 +41,38 @@ deaths <- data.frame()
 for(i in 2017:2022) {
   current_data <- read_csv(paste0(dir_name, "deathgeo", i, ".csv")) %>%
     select(one_of(keep_death)) %>%
-    mutate(year = i)
-  
-  # Check the format of DOD and reformat accordingly
-  if(is.integer(current_data$DOD)) {
-    # For integer-formatted dates (mmddyyyy)
-    current_data <- current_data %>%
-      mutate(DOD = paste0(substr(as.character(DOD), 1, 2), "/",    # mm/
-                          substr(as.character(DOD), 3, 4), "/",    # dd/
-                          substr(as.character(DOD), 5, 8))) %>%
-      rename("race1215" = "RACE1215")
-  }
-  
-  # Check and rename columns if they exist
-  if("GEOID10" %in% colnames(current_data)) {
-    current_data <- current_data %>% rename(GEOID = GEOID10)
-  }
-  else if("geoid10" %in% colnames(current_data)) {
-    current_data <- current_data %>% rename(GEOID = geoid10)
-  }
+    mutate(year = i) %>%
+    rename(GEOID = GEOID10)
+
   deaths <- bind_rows(deaths, current_data)
 }
 
 # Determine what % of all deaths could not be geocoded (2017-2019)
-nrow(filter(deaths, year <= 2019, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11)) / nrow(filter(deaths, year <= 2019)) * 100
+nrow(filter(deaths, year <= 2019, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11)) / nrow(filter(deaths, year <= 2019)) * 100 # 3.382928
 
 # Determine what % of all deaths could not be geocoded (2020-2022)
-nrow(filter(deaths, year >= 2020, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11)) / nrow(filter(deaths, year >= 2020)) * 100
+nrow(filter(deaths, year >= 2020, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11)) / nrow(filter(deaths, year >= 2020)) * 100 # 3.041299
 
 #Determine what % of all deaths could not be geocoded
 deaths_nogeo <- nrow(filter(deaths, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11))
 deaths_total <- nrow(deaths)
-deaths_nogeo/deaths_total*100
+deaths_nogeo/deaths_total*100 # 3.041299
 
 # For demographic information on race-ethnicity
 death_demographics <- function(df) {
   x <- df %>%
     mutate(
       sex = case_when(
-        SEX == 1 ~ "Male",
-        SEX == 2 ~ "Female",
+        SEX == 1 ~ "Men",
+        SEX == 2 ~ "Women",
         SEX == 9 ~ "Unknown"
       ),
       RACE = case_when(
-        RACE1215 == 01 ~ 1, #White race9011 == 1 (for older years)
-        RACE1215 == 02 ~ 2, #Black race9011 == 2 | (for older years)
-        RACE1215 == 03 ~ 3, #American Indian Alaska Native race9011 == 3 | (for older years)
-        RACE1215 >= 04 & RACE1215 <= 14 ~ 4, #AAPI ((race9011 >= 4 & race9011 <= 8) | race9011 == 0) | (for older years)
-        is.na(RACE1215) | RACE1215>= 15 ~ 5) %>% #Other race9011 == 9 | is.na(race9011) | (for older years)
+        as.integer(RACE1215) == 1 ~ 1, #White race9011 == 1 (for older years)
+        as.integer(RACE1215) == 2 ~ 2, #Black race9011 == 2 | (for older years)
+        as.integer(RACE1215) == 3 ~ 3, #American Indian Alaska Native race9011 == 3 | (for older years)
+        as.integer(RACE1215) >= 4 & as.integer(RACE1215) <= 14 ~ 4, #AAPI ((race9011 >= 4 & race9011 <= 8) | race9011 == 0) | (for older years)
+        is.na(RACE1215) | as.integer(RACE1215) >= 15 ~ 5) %>% #Other race9011 == 9 | is.na(race9011) | (for older years)
         factor(
           levels = c(1,2,3,4,5),
           labels = c("White", "Black", 
@@ -123,15 +107,15 @@ death_demographics <- function(df) {
 deaths_modified <- death_demographics(deaths)
 
 # Determine what % of deaths were missing sex (2017-2019)
-deaths_modified %>% filter(year <= 2019, SEX == 9) %>% nrow() / nrow(deaths_modified) * 100
+deaths_modified %>% filter(year <= 2019, SEX == 9) %>% nrow() / nrow(deaths_modified) * 100 # 0.0003451593
 
 # Determine what % of deaths were missing age at death (2017-2019)
-deaths_modified %>% filter(year <= 2019, is.na(Age_death)) %>% nrow() / nrow(deaths_modified) * 100
+deaths_modified %>% filter(year <= 2019, is.na(Age_death)) %>% nrow() / nrow(deaths_modified) * 100 # 0.01058488
 
 # Determine what % of deaths in Philly were not fully geocoded (2017-2019) (GEOID starts with 42101 but missing other info)
 deaths_modified %>% 
   filter(year <= 2019, substr(GEOID, 1, 5) == 42101, nchar(as.numeric(GEOID)) < 11) %>% 
-  nrow() / nrow(deaths_modified %>% filter(year <= 2019, substr(GEOID, 1, 5) == 42101)) * 100
+  nrow() / nrow(deaths_modified %>% filter(year <= 2019, substr(GEOID, 1, 5) == 42101)) * 100 # 0
 
 # Death by years
 pa_death_counts_by_years <- deaths_modified %>%
@@ -170,7 +154,7 @@ pa_death_count_summary <- deaths_modified %>%
             c(sex = "  Sex", "PA - 2017-2019" = "", "PA - 2020-2022" = "")) %>%
   rename("Measure" = sex) %>%
   mutate(Measure = factor(Measure, 
-                          levels = c("Number of deaths (%)", "  Total", "  Sex", "    Female", "    Male", "    Unknown"))) %>%
+                          levels = c("Number of deaths (%)", "  Total", "  Sex", "    Men", "    Women", "    Unknown"))) %>%
   arrange(Measure)
 
 # Save to CSV to use for Table 1
@@ -186,8 +170,8 @@ phila_deaths <- deaths %>%
       year >= 2017 & year <= 2019 ~ "2017-2019",
       year >= 2020 & year <= 2022 ~ "2020-2022"),
     sex = case_when(
-      SEX == 1 ~ "Male",
-      SEX == 2 ~ "Female",
+      SEX == 1 ~ "Men",
+      SEX == 2 ~ "Women",
       SEX == 9 ~ "Unknown"),
     age = case_when(
       floor(Age_death) >= age_limit ~ age_limit,
@@ -196,12 +180,12 @@ phila_deaths <- deaths %>%
   inner_join(age_grp_5)
 
 # What % of deaths were from low population/special land use tracts?
-nrow(filter(phila_deaths, GEOID %in% low_pop)) / nrow(phila_deaths) * 100
+nrow(filter(phila_deaths, GEOID %in% low_pop)) / nrow(phila_deaths) * 100 # 0.3329622
 
 # Philadelphia deaths with low population census tracts removed
 phila_deaths_nolow <- phila_deaths %>%
   filter(!(GEOID %in% low_pop))
-nrow(phila_deaths_nolow)
+nrow(phila_deaths_nolow) # 90,399
 
 # Save data (to encrypted drive)
 save(phila_deaths, 
@@ -255,7 +239,7 @@ phila_death_counts <- phila_deaths %>%
   ungroup() %>%
   full_join(phila_tracts_ages_sexes_years, by=c("GEOID", "years", "sex", "age")) %>%
   complete(GEOID, sex, years, age, fill = list(deaths = 0)) %>%
-  filter(sex %in% c("Male", "Female"), !is.na(years), !is.na(age), GEOID %in% phila_tracts) %>%
+  filter(sex %in% c("Men", "Women"), !is.na(years), !is.na(age), GEOID %in% phila_tracts) %>%
   arrange(sex, years, tract, age)
 sum(phila_death_counts$deaths) # 90,688
 
@@ -286,7 +270,7 @@ sum((phila_death_counts_nolow%>%filter(GEOID %in% low_pop))$deaths) # 0 deaths i
 # Check to make sure 301 removed is correct
 nrow(filter(phila_deaths_modified, !is.na(age), SEX != 9 , GEOID %in% low_pop)) # 301
 
-# Death counts by year in final sample
+# Death counts by period in final sample
 phila_death_counts_nolow %>%
   group_by(years) %>%
   summarise(deaths = sum(deaths))
@@ -318,8 +302,7 @@ sum((phila_death_counts_nolow_age_grp%>%filter(GEOID %in% low_pop))$deaths) # 0
 #Determine what % of philadelphia deaths could not be geocoded
 philadelphia_nogeo <- nrow(filter(phila_deaths, is.na(GEOID) | nchar(as.numeric(GEOID)) < 11))
 philadelphia_total <- nrow(phila_deaths)
-philadelphia_nogeo_pct <- philadelphia_nogeo/philadelphia_total*100
-philadelphia_geo_pct <- 100 - philadelphia_nogeo_pct
+philadelphia_nogeo/philadelphia_total*100 # 100
 
 # Save data (to encrypted drive)
 save(phila_death_counts, 
