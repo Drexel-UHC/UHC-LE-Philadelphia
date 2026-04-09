@@ -2,23 +2,24 @@
 # Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
+library(here)
 library(tidyverse)
 library(diagis)
 
 # Create variable to house directory paths
-dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
-results <- "Results/"
-working_results <- paste0(results, "Working Results/")
-main_text <- paste0(results, "Main Text/")
-appendix <- paste0(results, "Appendix/")
-path_onedrive <- "Data - Cleansed/"
+dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
+results <- here("Results")
+working_results <- here(results, "Working Results/")
+main_text <- here(results, "Main Text/")
+appendix <- here(results, "Appendix/")
+path_onedrive <- here("Data - Cleansed")
 
 # Load data created in crosswalks script
-load(file = paste0(path_onedrive, "phila_sf.Rdata"))
-load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
-load(file = paste0(path_onedrive, "years_cross.Rdata"))
-load(file = paste0(path_onedrive, "age_grp_5.Rdata"))
-load(file = paste0(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
+load(file = here(path_onedrive, "phila_sf.Rdata"))
+load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
+load(file = here(path_onedrive, "years_cross.Rdata"))
+load(file = here(path_onedrive, "age_grp_5.Rdata"))
+load(file = here(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
 
 # All tracts in Philly
 phila_tracts <- unique(phila_sf$GEOID)
@@ -39,7 +40,7 @@ keep_death <- c("FILENO", "SEX", "DOB", "GEOID10", # "geoid10", "year", "race121
 deaths <- data.frame()
 
 for(i in 2017:2022) {
-  current_data <- read_csv(paste0(dir_name, "deathgeo", i, ".csv")) %>%
+  current_data <- read_csv(here(dir_name, paste0("deathgeo", i, ".csv"))) %>%
     select(one_of(keep_death)) %>%
     mutate(year = i) %>%
     rename(GEOID = GEOID10)
@@ -158,7 +159,7 @@ pa_death_count_summary <- deaths_modified %>%
   arrange(Measure)
 
 # Save to CSV to use for Table 1
-write.csv(pa_death_count_summary, file = paste0(working_results,"pa_death_count_summary.csv"), row.names = F)
+write.csv(pa_death_count_summary, file = here(working_results,"pa_death_count_summary.csv"), row.names = F)
 
 # Philadelphia Deaths -----------------------------------------------------
 
@@ -190,7 +191,7 @@ nrow(phila_deaths_nolow) # 90,399
 # Save data (to encrypted drive)
 save(phila_deaths, 
      phila_deaths_nolow, 
-     file = paste0(dir_name, "Philly LE\\", "phila_deaths.Rdata"))
+     file = here(dir_name, "Philly LE", "phila_deaths.Rdata"))
 
 # Philadelphia deaths with demographic information
 phila_deaths_modified <- deaths_modified %>%
@@ -309,4 +310,4 @@ save(phila_death_counts,
      phila_death_counts_nolow, 
      phila_death_count_nolow_unknown,
      phila_death_counts_nolow_age_grp, 
-     file = paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata"))
+     file = here(dir_name, "Philly LE", "phila_death_counts.Rdata"))

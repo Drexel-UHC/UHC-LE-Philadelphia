@@ -41,15 +41,16 @@ library(tmap)
 library(RColorBrewer)
 library(highcharter)
 library(classInt)
+library(here)
 
 # Interactive mode for maps
 tmap_mode("view")
 
 # Load data
-load("Data/le_birth.Rdata")
-load("Data/le_change_sf.Rdata")
-load("Data/post_prob_sf.Rdata")
-load("Data/le_by_decile.Rdata")
+load(here("Quarto", "Data", "le_birth.Rdata"))
+load(here("Quarto", "Data", "le_change_sf.Rdata"))
+load(here("Quarto", "Data", "post_prob_sf.Rdata"))
+load(here("Quarto", "Data", "le_by_decile.Rdata"))
 
 # Convert data to sf
 le_birth_sf <- st_as_sf(le_birth)

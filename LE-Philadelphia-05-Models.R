@@ -2,6 +2,7 @@
 # Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
+library(here)
 library(tidyverse)
 library(DemoTools)
 library(splines)
@@ -12,16 +13,16 @@ library(nimble)
 library(classInt)
 
 # Create variable to house directory paths
-results <- "Results/"
-working_results <- paste0(results, "Working Results/")
-dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
-path_onedrive <- "Data - Cleansed/"
+results <- here("Results")
+working_results <- here(results, "Working Results")
+dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
+path_onedrive <- here("Data - Cleansed")
 
 # Load data
-load(file = paste0(path_onedrive, "phila_sf.Rdata"))
-load(file = paste0(path_onedrive,'sex_years.Rdata'))
-load(file=paste0(path_onedrive,'tract_ids.RData'))
-load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
+load(file = here(path_onedrive, "phila_sf.Rdata"))
+load(file = here(path_onedrive,'sex_years.Rdata'))
+load(file=here(path_onedrive,'tract_ids.RData'))
+load(file = here(dir_name, "Philly LE", "phila_death_rates.Rdata"))
 
 # Age groups for model
 age_limit<-85
@@ -157,14 +158,15 @@ cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \
 plan(sequential)
 
 # Save results for later use
-save(nimble_results_seer, file=paste0(path_onedrive, "nimble_results_seer_20250117.Rdata"))
+save(nimble_results_seer, 
+     file=here(path_onedrive, "nimble_results_seer_20250117.Rdata"))
 
 
 # Lambdas ----------------------------------------------------------------
 
 # Load nimble results created above, and mortality rates created in 03-Mortality Rates
-load(file=paste0(path_onedrive, "nimble_results_seer_20250117.Rdata"))
-load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
+load(file=here(path_onedrive, "nimble_results_seer_20250117.Rdata"))
+load(file = here(dir_name, "Philly LE", "phila_death_rates.Rdata"))
 
 # Extract lambdas by iteration
 lambdas_nimble <- do.call(rbind, lapply(seq_along(nimble_results_seer), function(i) {
@@ -188,7 +190,8 @@ lambdas_nimble <- do.call(rbind, lapply(seq_along(nimble_results_seer), function
   arrange(sex_years, GEOID, age, iteration)
 
 # Free unused memory and save results
-gc(); save(lambdas_nimble, file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata'))
+gc(); save(lambdas_nimble, 
+           file = here(path_onedrive,'lambdas_nimble_20250117.Rdata'))
 
 # Median log lambdas (thetas) and their 95% credible intervals
 thetas_med_ci <- lambdas_nimble %>%
@@ -215,13 +218,14 @@ thetas_med_ci <- lambdas_nimble %>%
   ungroup()
 
 # Free unused memory and save results for later use
-gc(); save(thetas_med_ci, file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'))
+gc(); save(thetas_med_ci, 
+           file = here(path_onedrive,'thetas_med_ci_20250117.Rdata'))
 
 
 # Model Convergence -------------------------------------------------------
 
 # Load lambdas created above
-load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata'))
+load(file = here(path_onedrive,'lambdas_nimble_20250117.Rdata'))
 
 # Trace plots
 lambda_convergence <- lambdas_nimble %>%
@@ -236,7 +240,7 @@ lambda_convergence <- lambdas_nimble %>%
   })
 
 # Save as PDF
-pdf(file = paste0(working_results,"lambda_convergence_20250117.pdf"))
+pdf(file = here(working_results,"lambda_convergence_20250117.pdf"))
 lambda_convergence
 dev.off()
 
@@ -256,7 +260,7 @@ lambda_density <- lambdas_nimble %>%
   })
 
 # Save as PDF
-pdf(file = paste0(working_results,"lambda_density_20250117.pdf"))
+pdf(file = here(working_results,"lambda_density_20250117.pdf"))
 lambda_density
 dev.off()
 
@@ -270,10 +274,10 @@ rm(lambda_density); gc()
 rm(list=ls()); gc()
 
 # Filepath
-path_onedrive <- "Data - Cleansed/"
+path_onedrive <- here("Data - Cleansed")
 
 # Load lambdas created above
-load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
+load(file = here(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
 
 # Splitting lambdas to send a smaller amount to each core. Because we have 2 time periods for men and women, we can send each combination to a separate core
 lambdas_split <- lambdas_nimble %>%
@@ -323,10 +327,11 @@ cat("Lifetable calculations took ", difftime(le_end, le_start), ' hours to run. 
 plan(sequential)
 
 # Free unused memory and save results for later use
-gc(); save(le_nimble,file=paste0(path_onedrive, "le_nimble_20250117.Rdata"))
+gc(); save(le_nimble,
+           file=here(path_onedrive, "le_nimble_20250117.Rdata"))
 
 # Load crosswalk
-load(file = paste0(path_onedrive,'sex_years.Rdata'))
+load(file = here(path_onedrive,'sex_years.Rdata'))
 
 # Dataframe of LE by iteration
 le_iter_nimble <- tibble(do.call(rbind,do.call(rbind,le_nimble))) %>%
@@ -337,7 +342,8 @@ le_iter_nimble <- tibble(do.call(rbind,do.call(rbind,le_nimble))) %>%
   filter((Age==0)|(Age==25)|(Age==65))
 
 # Free unused memory and save results for later use
-gc(); save(le_iter_nimble,file=paste0(path_onedrive, "le_iter_nimble_20250117.Rdata"))
+gc(); save(le_iter_nimble,
+           file=here(path_onedrive, "le_iter_nimble_20250117.Rdata"))
 
 # Point estimates and 95% CIs for LE
 le_df_nimble <- le_iter_nimble %>%
@@ -348,4 +354,5 @@ le_df_nimble <- le_iter_nimble %>%
             uci = quantile(le, probs = c(.975), na.rm = TRUE))
 
 # Free unused memory and save resultsfor later use
-gc(); save(le_df_nimble,file=paste0(path_onedrive, "le_df_nimble_20250117.Rdata"))
+gc(); save(le_df_nimble,
+           file=here(path_onedrive, "le_df_nimble_20250117.Rdata"))
