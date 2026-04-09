@@ -2,23 +2,24 @@
 # Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
+library(here)
 library(tidyverse)
 
 # Create variable to house directory paths
-results <- "Results/"
-working_results <- paste0(results, "Working Results/")
-main_text <- paste0(results, "Main Text/")
-appendix <- paste0(results, "Appendix/")
-path_onedrive <- "C:/Users/ga437/OneDrive - Drexel University/Documents/UHC-LE-Philadelphia/Data - Cleansed/"
-dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
+results <- here("Results")
+working_results <- here(results, "Working Results")
+main_text <- here(results, "Main Text")
+appendix <- here(results, "Appendix")
+path_onedrive <- here("Data - Cleansed")
+dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
 
 # Load data created in 01-Crosswalks
-load(file = paste0(path_onedrive,'sex_years.Rdata'))
-load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
+load(file = here(path_onedrive,'sex_years.Rdata'))
+load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
 
 # Load data data created in 02-Deaths and 03-Population
-load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata")); gc()
+load(file = here(path_onedrive, "phila_pop_seer.rdata"))
+load(here(dir_name, "Philly LE", "phila_death_counts.Rdata")); gc()
 
 
 # Mortality Rates ---------------------------------------------------------
@@ -73,5 +74,6 @@ theta_star_df <- bind_rows(theta_star_men_2017_2019, theta_star_men_2020_2022,
 phila_death_rates_age <- inner_join(phila_death_rates_age, theta_star_df)
 
 # Save data (to encrypted drive)
-save(phila_death_rates_age_tract, phila_death_rates_age, 
-     file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata"))
+save(phila_death_rates_age_tract, 
+     phila_death_rates_age, 
+     file = here(dir_name, "Philly LE", "phila_death_rates.Rdata"))

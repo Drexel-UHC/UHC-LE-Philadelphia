@@ -2,6 +2,7 @@
 # Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
+library(here)
 library(tidyverse)
 library(classInt)
 library(tidytext)
@@ -22,20 +23,21 @@ library(RColorBrewer)
 library(ggpubr)
 
 # Create variable to house directory paths
-results <- "Results/"
-working_results <- paste0(results, "Working Results/")
-main_text <- paste0(results, "Main Text/")
-appendix <- paste0(results, "Appendix/")
-path_onedrive <- "Data - Cleansed/"
-dir_name <- "//files.drexel.edu\\encrypted\\SOPH\\UHC\\SchnakeMahl_PAVitalStat\\Data\\"
+results <- here("Results")
+working_results <- here(results, "Working Results")
+main_text <- here(results, "Main Text")
+appendix <- here(results, "Appendix")
+path_onedrive <- here("Data - Cleansed")
+dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
+quarto <- here("Quarto")
 
 # Load data created in 01-Crosswalks 
-load(file=paste0(path_onedrive,'sex_years.RData'))
-load(file=paste0(path_onedrive,'phila_sf.RData'))
-load(file = paste0(path_onedrive, "phila_sf_2020.Rdata"))
-load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
-load(file=paste0(path_onedrive,'tract_ids.RData'))
-load(file = paste0(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
+load(file = here(path_onedrive, "sex_years.RData"))
+load(file = here(path_onedrive, "phila_sf.RData"))
+load(file = here(path_onedrive, "phila_sf_2020.Rdata"))
+load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
+load(file = here(path_onedrive, "tract_ids.RData"))
+load(file = here(path_onedrive, "phila_tracts_ages_sexes_years.Rdata"))
 
 # All tracts in Philly
 phila_tracts <- unique(phila_sf$GEOID)
@@ -45,7 +47,7 @@ phila_tracts_2020 <- unique(phila_sf_2020$GEOID)
 # Dataframes for Maps -----------------------------------------------------
 
 # Load LE data calculated in 05-Models
-load(file=paste0(path_onedrive, "le_df_nimble_20250117.Rdata"))
+load(file=here(path_onedrive, "le_df_nimble_20250117.Rdata"))
 
 # Dataframe life expectancy at birth by census tract x sex x years (with spatial structure for maps)
 le_birth <- filter(le_df_nimble, Age == 0) %>%
@@ -67,13 +69,14 @@ le_birth <- filter(le_df_nimble, Age == 0) %>%
   arrange(sex_years, tract)
 
 # Save for Quarto doc
-save(le_birth, file = "Quarto/Data/le_birth.Rdata")
+save(le_birth, 
+     file = here("Quarto", "Data", "le_birth.Rdata"))
 
 
 # Summary -----------------------------------------------------------------
 
 # Load LE at birth data created above
-load(file = "Quarto/Data/le_birth.Rdata"); gc()
+load(file = here("Quarto", "Data", "le_birth.Rdata")); gc()
 
 # Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
@@ -99,7 +102,7 @@ le_change_summary <- le_birth %>%
 # MHI ---------------------------------------------------------------------
 
 # Load 2020-2010 GEOID Crosswalk created in 01-Crosswalks
-load(file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
+load(file = here(path_onedrive, "geoid_crosswalk.Rdata"))
 
 #Pull MHI by tract
 mhi_1 <-  map_dfr(c(2019:2023), function(year_mhi){
@@ -155,7 +158,8 @@ mhi <- mhi_1 %>%
       TRUE ~ mhi))
 
 # Save for later use
-save(mhi, file = paste0(path_onedrive, "mhi.Rdata"))
+save(mhi, 
+     file = here(path_onedrive, "mhi.Rdata"))
 
 # Filter for just 2020-2022 and map to 2010 census tracts
 mhi_2020_2022 <- mhi_1 %>%
@@ -187,7 +191,8 @@ mhi_sensitivity <- mhi_1 %>%
       TRUE ~ mhi))
 
 # Save for later use
-save(mhi_sensitivity, file = paste0(path_onedrive, "mhi_sensitivity.Rdata"))
+save(mhi_sensitivity, 
+     file = here(path_onedrive, "mhi_sensitivity.Rdata"))
 
 # Compare 2017-2019 and 2020-2022 MHI
 mhi_comparison <- mhi_sensitivity %>%
@@ -231,7 +236,8 @@ mhi_deciles <- mhi %>%
   select(GEOID, years, mhi, decile_income, decile_income1, geometry) # pop_men, pop_women, pop_total,
 
 # Save for later use
-save(mhi_deciles, file=paste0(path_onedrive, "mhi_deciles.Rdata"))
+save(mhi_deciles, 
+     file = here(path_onedrive, "mhi_deciles.Rdata"))
 
 # MHI deciles - sensitivity analysis
 mhi_deciles_sensitivity <-  mhi_sensitivity %>% 
@@ -242,15 +248,16 @@ mhi_deciles_sensitivity <-  mhi_sensitivity %>%
   select(GEOID, years, mhi, decile_income, decile_income1, geometry)
 
 # Save for later use
-save(mhi_deciles_sensitivity, file=paste0(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
+save(mhi_deciles_sensitivity, 
+     file = here(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
 
 
 # LE by Iteration with Income Decile --------------------------------------
 
 # Load LE data created in 05-Models & MHI data created above
-load(paste0(path_onedrive,'le_iter_nimble_20250117.Rdata'))
-load(file=paste0(path_onedrive, "mhi_deciles.Rdata"))
-load(file=paste0(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
+load(file = here(path_onedrive, "le_iter_nimble_20250117.Rdata"))
+load(file = here(path_onedrive, "mhi_deciles.Rdata"))
+load(file = here(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
 
 # LE by iteration with MHI deciles - main analysis
 le_iter <- le_iter_nimble %>%
@@ -262,7 +269,8 @@ le_iter <- le_iter_nimble %>%
       TRUE ~ le))
 
 # Save for later use
-save(le_iter, file=paste0(path_onedrive, "le_iter.Rdata"))
+save(le_iter, 
+     file = here(path_onedrive, "le_iter.Rdata"))
 
 # LE by iteration with MHI deciles - sensitivity analysis
 le_iter_sensitivity <- le_iter_nimble %>%
@@ -274,7 +282,8 @@ le_iter_sensitivity <- le_iter_nimble %>%
       TRUE ~ le))
 
 # Save for later use
-save(le_iter_sensitivity, file=paste0(path_onedrive, "le_iter_sensitivity.Rdata"))
+save(le_iter_sensitivity, 
+     file = here(path_onedrive, "le_iter_sensitivity.Rdata"))
 
 # Change in LE by iteration - main analysis
 le_iter_change <- le_iter_nimble %>%
@@ -318,7 +327,8 @@ le_birth_change <- le_iter_change %>%
   arrange(sex, tract)
 
 # Save for later use and for Quarto doc
-save(le_birth_change, file = "Quarto/Data/le_birth_change.Rdata")
+save(le_birth_change, 
+     file = here("Quarto", "Data", "le_birth_change.Rdata"))
 
 # % of Tracts that had a decrease in LE
 le_decrease <- le_birth_change %>%
@@ -349,7 +359,8 @@ le_birth_post_prob_dec <- le_iter_change %>%
       TRUE ~ prob_decr))
 
 # Save for later use
-save(le_birth_post_prob_dec, file=paste0(path_onedrive, "le_birth_post_prob_dec.Rdata"))
+save(le_birth_post_prob_dec, 
+     file = here(path_onedrive, "le_birth_post_prob_dec.Rdata"))
 
 # Take average over tracts of posterior probabilities 
 le_birth_post_prob_dec_summary <- le_birth_post_prob_dec %>%
@@ -371,7 +382,8 @@ le_iter_change_deciles <- bind_rows(
       TRUE ~ change))
 
 # Save for later use
-save(le_iter_change_deciles, file = paste0(path_onedrive, "le_iter_change_deciles.rdata"))
+save(le_iter_change_deciles, 
+     file = here(path_onedrive, "le_iter_change_deciles.rdata"))
 
 # Change in LE with MHI deciles - sensitivity analysis
 le_iter_change_deciles_sensitivity <- bind_rows(
@@ -388,14 +400,15 @@ le_iter_change_deciles_sensitivity <- bind_rows(
       TRUE ~ change))
 
 # Save for later use
-save(le_iter_change_deciles_sensitivity, file = paste0(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
+save(le_iter_change_deciles_sensitivity, 
+     file = here(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
 
 
 # Total Disparities -------------------------------------------------------
 
 #Load LE data created in 03-Population and 05-Models
-load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(file=paste0(path_onedrive, "le_iter.Rdata"))
+load(file = here(path_onedrive, "phila_pop_seer.rdata"))
+load(file = here(path_onedrive, "le_iter.Rdata"))
 
 # Absolute disparities
 abs_ineq_long <- le_iter %>%
@@ -474,7 +487,8 @@ summary_table <- abs_ineq_summary %>%
       MLD = paste0(med_mld.wt, " (", lci_mld.wt, ", ", uci_mld.wt, ")"))
 
 # Save data for Quarto doc
-save(summary_table, file = "Quarto/Data/summary_table.Rdata")
+save(summary_table, 
+     file = here("Quarto", "Data", "summary_table.Rdata"))
 
 # Write table to CSV
 write.csv(summary_table, paste0(working_results,"summary_table_20250117.csv"), row.names = FALSE)
@@ -490,16 +504,17 @@ summary_time_disparities_table <- abs_ineq_time_disparities %>%
       RelDif = paste0(med_ratio_ratio, " (", lci_ratio_ratio, ", ", uci_ratio_ratio, ")"))
 
 # Write table to CSV
-write.csv(summary_time_disparities_table, paste0(working_results,"summary_time_disparities_table_20250117.csv"), row.names = FALSE)
+write.csv(summary_time_disparities_table, 
+          file = here(working_results,"summary_time_disparities_table_20250117.csv"), row.names = FALSE)
 
 
 # Income-Based Disparities ------------------------------------------------
 
 # Load population data created in 03-Population
-load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
+load(file = here(path_onedrive, "phila_pop_seer.rdata"))
 
 # Load iteration-level LE and changes in LE by deciles created above
-load(file=paste0(path_onedrive, "le_iter.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter.Rdata")); gc()
 
 # Find the top/bottom ratio and top/bottom difference for LE using MHI deciles - main analysis
 decile_le <- le_iter %>%
@@ -516,7 +531,7 @@ decile_le <- le_iter %>%
 rm(le_iter); gc()
 
 # Load iteration-level changes in LE data created above
-load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
+load(file = here(path_onedrive, "le_iter_change_deciles.rdata")); gc()
 
 # Find the top/bottom ratio and top/bottom difference for change in LE using MHI deciles - main analysis
 decile_le_change <- le_iter_change_deciles %>%
@@ -533,7 +548,7 @@ decile_le_change <- le_iter_change_deciles %>%
 rm(le_iter_change_deciles); gc()
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # Find the top/bottom ratio and top/bottom difference using MHI deciles - sensitivity analysis
 decile_le_sensitivity <- le_iter_sensitivity %>%
@@ -588,7 +603,7 @@ summary_income_sensitivity <- decile_le_sensitivity %>%
 # RII - Relative Index of Inequality - SII rel. to avg. health in the population
 
 # Load iteration-level LE and changes in LE by deciles created above
-load(file=paste0(path_onedrive, "le_iter.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter.Rdata")); gc()
 
 # SII/RII - main analysis
 income_ineq_v2 <- le_iter %>%
@@ -607,7 +622,7 @@ income_ineq_v2 <- le_iter %>%
 rm(le_iter); gc()
 
 # Load iteration-level changes in LE data created above
-load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
+load(file = here(path_onedrive, "le_iter_change_deciles.rdata")); gc()
 
 # SII/RII for change in LE - main analysis
 income_ineq_v2_change <- le_iter_change_deciles %>%
@@ -626,7 +641,7 @@ income_ineq_v2_change <- le_iter_change_deciles %>%
 rm(le_iter_change_deciles); gc()
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # SII/RII - sensitivity analysis
 income_ineq_v2_sensitivity <- le_iter_sensitivity %>%
@@ -700,10 +715,13 @@ income_ineq_table <- income_ineq %>%
   select(-c(years, sex, sex_years))
 
 # Save data for Quarto doc
-save(income_ineq_table, file = "Quarto/Data/income_ineq_table.Rdata")
+save(income_ineq_table, 
+     file = here("Quarto", "Data", "income_ineq_table.Rdata"))
 
 # Write table to CSV
-write.csv(income_ineq_table, paste0(working_results,"income_ineq_table_20250117.csv"), row.names = FALSE)
+write.csv(income_ineq_table, 
+          file = here(working_results, "income_ineq_table_20250117.csv"), 
+          row.names = FALSE)
 
 # Create table for change in LE with CIs
 income_ineq_table_change <- income_ineq_change %>%
@@ -733,14 +751,15 @@ income_ineq_table_sensitivity <- income_ineq_sensitivity %>%
   select(-c(years, sex, sex_years))
 
 # Save data for Quarto doc
-save(income_ineq_table_sensitivity, file = paste0(path_onedrive, "income_ineq_table_sensitivity.Rdata"))
+save(income_ineq_table_sensitivity, 
+     file = here(path_onedrive, "income_ineq_table_sensitivity.Rdata"))
 
 
 # Data for LE by MHI Decile Plots -----------------------------------------
 
 # Load iteration-level LE and changes in LE by deciles created above
-load(file=paste0(path_onedrive, "le_iter.Rdata")); gc()
-load(file=paste0(path_onedrive, "phila_pop_seer.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter.Rdata")); gc()
+load(file = here(path_onedrive, "phila_pop_seer.Rdata")); gc()
 
 # LE by Decile
 le_by_decile <- le_iter %>%
@@ -764,10 +783,11 @@ le_by_decile <- le_iter %>%
 rm(le_iter); gc()
 
 #Save data for later use and for Quarto doc
-save(le_by_decile, file = "Quarto/Data/le_by_decile.Rdata")
+save(le_by_decile, 
+     file = here("Quarto", "Data", "le_by_decile.Rdata"))
 
 # Load iteration-level LE for sensitivity analysis created above
-load(file=paste0(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
+load(file = here(path_onedrive, "le_iter_sensitivity.Rdata")); gc()
 
 # LE by Decile for sensitivity analysis
 le_by_decile_sensitivity <- le_iter_sensitivity %>%
@@ -784,10 +804,10 @@ le_by_decile_sensitivity <- le_iter_sensitivity %>%
 rm(le_iter_sensitivity); gc()
 
 #Save data for later use
-save(le_by_decile_sensitivity, file = paste0(path_onedrive, "le_by_decile_sensitivity.Rdata"))
+save(le_by_decile_sensitivity, file = here(path_onedrive, "le_by_decile_sensitivity.Rdata"))
 
 # Load iteration-level changes in LE data created above
-load(file = paste0(path_onedrive, "le_iter_change_deciles.rdata")); gc()
+load(file = here(path_onedrive, "le_iter_change_deciles.rdata")); gc()
 
 # Change in LE by MHI decile - main analysis
 le_change_by_decile <- le_iter_change_deciles %>%
@@ -805,10 +825,11 @@ le_change_by_decile <- le_iter_change_deciles %>%
 rm(le_iter_change_deciles); gc()
 
 # Save data for later use
-save(le_change_by_decile, file = paste0(path_onedrive, "le_change_by_decile.Rdata"))
+save(le_change_by_decile, 
+     file = here(path_onedrive, "le_change_by_decile.Rdata"))
 
 # Load iteration-level LE changes (sensitivity) created above
-load(file = paste0(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
+load(file = here(path_onedrive, "le_iter_change_deciles_sensitivity.rdata"))
 
 # Change in LE by MHI decile - sensitivity analysis
 le_change_by_decile_sensitivity <- le_iter_change_deciles_sensitivity %>%
@@ -826,15 +847,16 @@ le_change_by_decile_sensitivity <- le_iter_change_deciles_sensitivity %>%
 rm(le_iter_change_deciles_sensitivity); gc()
 
 # Save data for later use
-save(le_change_by_decile_sensitivity, file = paste0(path_onedrive, "le_change_by_decile_sensitivity.Rdata"))
+save(le_change_by_decile_sensitivity, 
+     file = here(path_onedrive, "le_change_by_decile_sensitivity.Rdata"))
 
 
 # Mortality Rate Plots ---------------------------------------------------
 
 # Load mortality rate data created in 03-Mortality-Rates and 05-Models
-load(file = paste0(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
-load(file = paste0(dir_name, "Philly LE\\", "phila_death_rates.Rdata")); gc()
-load(file = paste0(path_onedrive,'thetas_med_ci_20250117.Rdata'));
+load(file = here(path_onedrive, "lambdas_nimble_20250117.Rdata")); gc()
+load(file = here(dir_name, "Philly LE", "phila_death_rates.Rdata")); gc()
+load(file = here(path_onedrive, "thetas_med_ci_20250117.Rdata"));
 
 # Plot estimated rates with credible intervals
 rates_plot_ribbon <- thetas_med_ci %>% 
@@ -858,7 +880,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
   })
 
 # Save as PDF
-pdf(file = paste0(working_results,"rates_plot_ribbon_20250117.pdf"))
+pdf(file = here(working_results, "rates_plot_ribbon_20250117.pdf"))
 rates_plot_ribbon
 dev.off()
 
@@ -866,9 +888,9 @@ dev.off()
 # Table 1 - Descriptive Statistics/Disparities ----------------------------
 
 # Load data created above
-load(file = "Quarto/Data/summary_table.Rdata")
-load(file = "Quarto/Data/income_ineq_table.Rdata")
-load(file = "Quarto/Data/le_birth.Rdata")
+load(file = here("Quarto", "Data", "summary_table.Rdata"))
+load(file = here("Quarto", "Data", "income_ineq_table.Rdata"))
+load(file = here("Quarto", "Data", "le_birth.Rdata"))
 
 # Combine total and income-based disparities for Table 1
 # Median LE by sex and time period
@@ -931,7 +953,7 @@ table1_sensitivity <- rbind(table1_averageLE,
 # Figure 1 - LE w/ Credible Intervals Plots -------------------------------
 
 # Load data created above
-load(file = "Quarto/Data/le_birth.Rdata")
+load(file = here("Quarto", "Data", "le_birth.Rdata"))
 
 # Calculate ordering based on baseline years
 t1_order <- le_birth %>%
@@ -947,18 +969,18 @@ le_plots_t1_order <- le_birth %>%
   geom_point(aes(y = reorder(med, order), x = med, col = years)) +
   geom_segment(aes(y = reorder(med, order), 
                    yend = reorder(med, order), 
-                   x = lci, xend = uci, col = years)) +
+                   x = lci, xend = uci, col = years), alpha = 0.4) +
   theme_bw() +
   theme(
-    axis.text=element_text(color="black", size=25),
-    axis.title.x =element_text(color="black", size=25),
+    axis.text=element_text(color="black", size=15), #25
+    axis.title.x =element_text(color="black", size=15), #25
     axis.title.y =element_blank(),
-    strip.text=element_text(color="black", size=25),
+    strip.text=element_text(color="black", size=15), #25
     axis.text.y=element_blank(), 
     axis.ticks.y=element_blank(),
     legend.position = "bottom",
-    legend.text = element_text(size = 25),
-    legend.title = element_text(size = 25),
+    legend.text = element_text(size = 15), #25
+    legend.title = element_text(size = 15), #25
     strip.placement = "outside") +
   facet_wrap(~sex, ncol = 2, scales="free_y") +
   scale_x_continuous(sec.axis = dup_axis(name = NULL),
@@ -967,7 +989,7 @@ le_plots_t1_order <- le_birth %>%
 le_plots_t1_order
 
 # Load LE change data created above
-load(file = "Quarto/Data/le_birth_change.Rdata")
+load(file = here("Quarto", "Data", "le_birth_change.Rdata"))
 
 # Calculate ordering based on change in LE
 change_order <- le_birth_change %>%
@@ -982,14 +1004,14 @@ le_change_plots <- le_birth_change %>%
   geom_point(aes(y = reorder(med, order), x = med)) +
   geom_segment(aes(y = reorder(med, order), 
                    yend = reorder(med, order), 
-                   x = lci, xend = uci)) +
+                   x = lci, xend = uci), alpha = 0.65) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(
-    axis.text=element_text(color="black", size=25),
-    axis.title.x =element_text(color="black", size=25),
+    axis.text=element_text(color="black", size=15), #25
+    axis.title.x =element_text(color="black", size=15), #25
     axis.title.y =element_blank(),
-    strip.text=element_text(color="black", size=25),
+    strip.text=element_text(color="black", size=15), #25
     axis.text.y=element_blank(), 
     axis.ticks.y=element_blank(),
     strip.placement = "outside") +
@@ -1004,16 +1026,23 @@ le_change_plots
 le_plots_combined <- ggarrange(le_plots_t1_order, le_change_plots, ncol = 1)
 
 # Save as PDF and PNG
-ggsave(filename = paste0(main_text,"figure1.pdf"), plot = le_plots_combined, 
-       device = "pdf", width = 16, height = 20)
-ggsave(filename = paste0(main_text,"figure1.png"), plot = le_plots_combined, 
-       device = "png", width = 16, height = 18, dpi = 600)
+ggsave(filename = here(main_text, "figure1.pdf"), 
+       plot = le_plots_combined, 
+       device = "pdf", width = 7, 
+       height = 11, 
+       dpi = 600)
+ggsave(filename = here(main_text, "figure1.png"), 
+       plot = le_plots_combined, 
+       device = "png", 
+       width = 10, 
+       height = 15, 
+       dpi = 600)
 
 
 # Figure 2 - Maps of LE at Birth ------------------------------------------
 
 # Load data created above
-load(file = "Quarto/Data/le_birth.Rdata")
+load(file = here("Quarto", "Data", "le_birth.Rdata"))
 
 # LE at birth maps
 # Convert to sf object
@@ -1050,11 +1079,11 @@ for (i in unique(le_sf$sex_years_lab)) {
     tm_title(i) +
     tm_layout(
       title.position = c('center', 'top'),
-      title.size = 2,
-      inner.margins = c(0.02, 0.02, 0.02, 0.02),
+      title.size = 1,
+      inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c('right', 'bottom'),
-      legend.title.size = 1.4, 
-      legend.text.size = 1.4)
+      legend.title.size = 0.7, #1.4
+      legend.text.size = 0.65) #1.4
 }
 
 # Put maps together
@@ -1062,17 +1091,24 @@ le_maps <- tmap_arrange(le_maps_list, ncol = 2, outer.margins = 0.02, widths = c
 le_maps
 
 # Save as PDF and PNG
-tmap_save(le_maps, filename = paste0(main_text,"figure2.pdf"), 
-          width = 14, height = 14, dpi = 600)
-tmap_save(le_maps, filename = paste0(main_text,"figure2.png"),
-          width = 14, height = 14, units = "in", dpi = 600)
+tmap_save(le_maps, 
+          filename = here(main_text, "figure2.pdf"), 
+          width = 7, 
+          height = 7, 
+          dpi = 600)
+tmap_save(le_maps, 
+          filename = here(main_text,"figure2.png"),
+          width = 14, 
+          height = 14, 
+          units = "in", 
+          dpi = 600)
 
 
 # Figure 3 - Maps of Change in LE/Posterior Probability -------------------
 
 # Load data created above
 load(file = "Quarto/Data/le_birth_change.Rdata")
-load(file=paste0(path_onedrive, "le_birth_post_prob_dec.Rdata"))
+load(file = here(path_onedrive, "le_birth_post_prob_dec.Rdata"))
 
 # Change in LE at birth maps
 le_change_sf <- le_birth_change %>%
@@ -1084,8 +1120,11 @@ post_prob_sf <- le_birth_post_prob_dec %>%
   st_as_sf()
 
 # Save for Quarto doc
-save(le_change_sf, file = "Quarto/Data/le_change_sf.Rdata")
-save(post_prob_sf, file = "Quarto/Data/post_prob_sf.Rdata")
+save(le_change_sf, 
+     file = here("Quarto", "Data", "le_change_sf.Rdata"))
+
+save(post_prob_sf, 
+     file = here("Quarto", "Data", "post_prob_sf.Rdata"))
 
 # Initialize lists to store maps
 le_change_maps_list <- list()
@@ -1119,15 +1158,18 @@ for (i in unique(le_change_sf$sex)) {
     tm_title(i) +
     tm_layout(
       title.position = c('center', 'top'),
-      title.size = 2,
-      inner.margins = c(0.02, 0.02, 0.02, 0.25),
+      title.size = 1, #2 
+      inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c('right', 'bottom'), 
-      legend.title.size = 1.4, 
-      legend.text.size = 1.4
+      legend.title.size = .7, #1.4
+      legend.text.size = .65 #1.5
     )
   
   # Posterior probability data
   post_prob_i <- post_prob_sf %>% filter(sex == i)
+  
+  # Breaks for legend
+  breaks_post_prob <- c(0, 5, 10, 25, 75, 90, 95, 100)
   
   # Posterior probability map
   post_prob_maps_list[[i]] <- tm_shape(post_prob_i) + 
@@ -1137,20 +1179,22 @@ for (i in unique(le_change_sf$sex)) {
       fill.scale = tm_scale_intervals(
         style = "fixed",
         breaks = c(0, 5, 10, 25, 75, 90, 95, 100),
-        values = brewer.pal(7, "RdBu")[7:1], 
+        values = brewer.pal(7, "RdBu")[7:1],
         label.format = list(text.separator = "to"),
         label.na = "NA"),
-      fill.legend = tm_legend(title = "Posterior Probability \nof Decrease in LE (%)"),
+      fill.legend = tm_legend(
+        title = "Post. Prob. of a \nDecr. in LE (%)",
+        ncol = 2), # 
       id = "GEOID"
     ) +
     tm_title(i) +
     tm_layout(
       title.position = c('center', 'top'),
-      title.size = 2,
-      inner.margins = c(0.02, 0.02, 0.02, 0.25),
+      title.size = 1,
+      inner.margins = c(0.1, 0.05, 0.05, 0.15),
       legend.position = c('right', 'bottom'), 
-      legend.title.size = 1.4, 
-      legend.text.size = 1.4
+      legend.title.size = .7, # 1.4 
+      legend.text.size = .65 # 1.4
     )
 }
 
@@ -1161,19 +1205,27 @@ le_change_post_prob_maps <- tmap_arrange(le_change_post_prob_maps_list,
 le_change_post_prob_maps
 
 # Save as PDF and PNG
-tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.pdf"), 
-          width = 14, height = 14, dpi = 600)
-tmap_save(le_change_post_prob_maps, filename = paste0(main_text,"figure3.png"),
-          width = 14, height = 14, units = "in", dpi = 600)
+tmap_save(le_change_post_prob_maps, 
+          filename = here(main_text,"figure3.pdf"), 
+          width = 7, 
+          height = 7, 
+          dpi = 600)
+
+tmap_save(le_change_post_prob_maps, 
+          filename = here(main_text,"figure3.png"),
+          width = 14, 
+          height = 14, 
+          units = "in", 
+          dpi = 600)
 
 
 # Figure 4 - LE/Change in LE by MHI Decile (main analysis) ----------------
 
 # Load data
-load(file = "Quarto/Data/le_by_decile.Rdata")
-load(file = paste0(path_onedrive, "le_by_decile_sensitivity.Rdata"))
-load(file = paste0(path_onedrive, "le_change_by_decile.Rdata"))
-load(file = paste0(path_onedrive, "le_change_by_decile_sensitivity.Rdata"))
+load(file = here("Quarto", "Data", "le_by_decile.Rdata"))
+load(file = here(path_onedrive, "le_by_decile_sensitivity.Rdata"))
+load(file = here(path_onedrive, "le_change_by_decile.Rdata"))
+load(file = here(path_onedrive, "le_change_by_decile_sensitivity.Rdata"))
 
 # Plots of LE by MHI decile with SII - main analysis
 le_by_decile_plot_sii <- le_by_decile %>% 
@@ -1189,14 +1241,21 @@ le_by_decile_plot_sii <- le_by_decile %>%
   scale_x_continuous(limits=c(-0.2, 11), breaks=seq(0, 10 , by=2))+
   theme_bw() +
   theme(axis.text=element_text(color="black", size=15),
-        axis.title =element_text(color="black", face="bold", size=20),
-        strip.text=element_text(color="black", face="bold", size=20),
+        axis.title =element_text(color="black", face="bold", size=15), # 20
+        strip.text=element_text(color="black", face="bold", size=15), # 20
         strip.background = element_blank(), 
         legend.position = "bottom",
-        legend.text = element_text(size=18), 
-        legend.title = element_text(size=18)) + 
+        legend.text = element_text(size=15), # 18
+        legend.title = element_text(size=15)) + # 18 
   facet_wrap(~Sex)
 le_by_decile_plot_sii
+
+ggsave(filename = here(working_results,"figure4_sii.png"), 
+       plot = le_by_decile_plot_sii, 
+       device = "png", 
+       width = 7, 
+       height = 4, 
+       dpi = 600)
 
 # Plots of LE by MHI decile with SII - sensitivity analysis
 le_by_decile_plot_sii_sensitivity <- le_by_decile_sensitivity %>% 
@@ -1230,28 +1289,39 @@ le_change_by_decile_plot <- le_change_by_decile %>%
   scale_x_continuous(limits=c(-0.2, 11), breaks=seq(0, 10 , by=2))+
   theme_bw() +
   theme(axis.text=element_text(color="black", size=15),
-        axis.title =element_text(color="black", face="bold", size=20),
-        strip.text=element_text(color="black", face="bold", size=20),
-        strip.background = element_blank(), legend.position = "bottom",
-        legend.text = element_text(size=18), legend.title = element_text(size=18)) + 
+        axis.title =element_text(color="black", face="bold", size=15), # 20
+        strip.text=element_text(color="black", face="bold", size=15), # 20
+        strip.background = element_blank(), 
+        legend.position = "bottom",
+        legend.text = element_text(size=15), # 18 
+        legend.title = element_text(size=15)) + # 18
   facet_wrap(~Sex)
 le_change_by_decile_plot
 
 # Stack plots of LE by MHI decile and chage in LE by MHI decile - main analysis
-le_by_decile_plot_stacked <- ggarrange(le_by_decile_plot_sii, le_change_by_decile_plot, ncol = 1)
+le_by_decile_plot_stacked <- ggarrange(le_by_decile_plot_sii, le_change_by_decile_plot, 
+                                       ncol = 1, heights = c(1,0.85))
 
 # Save plots as PDF and PNG
-ggsave(filename = paste0(main_text,"figure4.pdf"), plot = le_by_decile_plot_stacked, 
-       device = "pdf", width = 10, height = 12, dpi = 600)
-ggsave(filename = paste0(main_text,"figure4.png"), plot = le_by_decile_plot_stacked, 
-       device = "png", width = 10, height = 11, dpi = 600)
+ggsave(filename = here(main_text,"figure4.pdf"), 
+       plot = le_by_decile_plot_stacked, 
+       device = "pdf", 
+       width = 7, 
+       height = 9, dpi = 600)
+
+ggsave(filename = here(main_text,"figure4.png"), 
+       plot = le_by_decile_plot_stacked, 
+       device = "png", 
+       width = 10, 
+       height = 11, 
+       dpi = 600)
 
 
 # Appendix S4 - Demographics of Vital Statistics and ACS Data -------------
 
 # Load mortality data created in 02-Deaths (from encrypted drive)
-load(file = paste0(dir_name, "Philly LE\\", "phila_deaths.Rdata"))
-load(file = paste0(dir_name, "Philly LE\\", "phila_death_counts.Rdata"))
+load(file = here(dir_name, "Philly LE", "phila_deaths.Rdata"))
+load(file = here(dir_name, "Philly LE", "phila_death_counts.Rdata"))
 
 # Summary table for age at death in Philadelphia for Appendix S4
 phila_age_at_death_summary <- phila_deaths_nolow %>% 
@@ -1339,8 +1409,8 @@ phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
   arrange(Measure)
 
 # Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
-load(file = paste0(path_onedrive, "phila_pop_seer.rdata"))
-load(file = paste0(path_onedrive, "mhi_sensitivity.Rdata"))
+load(file = here(path_onedrive, "phila_pop_seer.rdata"))
+load(file = here(path_onedrive, "mhi_sensitivity.Rdata"))
 
 #Get average and sd of mhi for Philadelphia
 weighted_mhi_phila <- mhi_sensitivity %>%
@@ -1366,13 +1436,15 @@ appendix_mort_summary <- bind_rows(
 )
 
 # Save to use for Appendix S4
-write.csv(appendix_mort_summary, file = paste0(appendix,"S4.csv"), row.names = F)
+write.csv(appendix_mort_summary, 
+          file = here(appendix,"S4.csv"), 
+          row.names = F)
 
 
 # Appendix S5 - MHI Maps --------------------------------------------------
 
 # Load Data
-load(file=paste0(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
+load(file = here(path_onedrive, "mhi_deciles_sensitivity.Rdata"))
 
 # Convert to sf
 mhi_sf <- st_as_sf(mhi_deciles_sensitivity)
@@ -1418,8 +1490,17 @@ mhi_maps <- tmap_arrange(mhi_maps_list, ncol = 2, outer.margins = 0.02, widths =
 mhi_maps
 
 # Save as pdf and png
-tmap_save(mhi_maps, filename = paste0(appendix,"S5.pdf"), width = 14, height = 8, dpi = 600)
-tmap_save(mhi_maps, filename = paste0(appendix,"S5.png"), width = 14, height = 8, dpi = 600)
+tmap_save(mhi_maps, 
+          filename = here(appendix,"S5.pdf"), 
+          width = 14, 
+          height = 8, 
+          dpi = 600)
+
+tmap_save(mhi_maps, 
+          filename = here(appendix,"S5.png"), 
+          width = 14, 
+          height = 8, 
+          dpi = 600)
 
 
 # Appendix S6 - LE/Change in LE by MHI Decile (Sensitivity) ---------------
@@ -1446,8 +1527,17 @@ le_change_by_decile_plot_sensitivity
 le_by_decile_plot_stacked_sensitivity <- ggarrange(le_by_decile_plot_sii_sensitivity, le_change_by_decile_plot_sensitivity, ncol = 1)
 
 # Save plots
-ggsave(filename = paste0(appendix,"S6.pdf"), plot = le_by_decile_plot_stacked_sensitivity, 
-       device = "pdf", width = 10, height = 12, dpi = 600)
-ggsave(filename = paste0(appendix,"S6.png"), plot = le_by_decile_plot_stacked_sensitivity, 
-       device = "png", width = 10, height = 12, dpi = 600)
+ggsave(filename = here(appendix,"S6.pdf"), 
+       plot = le_by_decile_plot_stacked_sensitivity, 
+       device = "pdf", 
+       width = 10, 
+       height = 12, 
+       dpi = 600)
+
+ggsave(filename = here(appendix,"S6.png"), 
+       plot = le_by_decile_plot_stacked_sensitivity, 
+       device = "png", 
+       width = 10, 
+       height = 12, 
+       dpi = 600)
 

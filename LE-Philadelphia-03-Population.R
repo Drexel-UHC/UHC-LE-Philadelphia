@@ -2,26 +2,27 @@
 # Load Libraries & Data ---------------------------------------------------
 
 rm(list=ls())
+library(here)
 library(tidyverse)
 library(DemoTools)
 library(readr)
 library(sf)
 
 # Create variable to house directory paths
-data <- "Data/"
-results <- "Results/"
-working_results <- paste0(results, "Working Results/")
-main_text <- paste0(results, "Main Text/")
-appendix <- paste0(results, "Appendix/")
-path_onedrive <- "Data - Cleansed/"
+data <- here("Data")
+results <- here("Results")
+working_results <- here(results, "Working Results")
+main_text <- here(results, "Main Text/")
+appendix <- here(results, "Appendix/")
+path_onedrive <- here("Data - Cleansed")
 
 # Load relevant crosswalks
-load(file = paste0(path_onedrive, "geoid_crosswalk.Rdata"))
-load(file = paste0(path_onedrive,'phila_tracts_age_grp_5_sexes_years.Rdata'))
-load(file = paste0(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
-load(file = paste0(path_onedrive, "phila_sf.Rdata"))
-load(file = paste0(path_onedrive, "phila_sf_cross.Rdata"))
-load(file = paste0(path_onedrive, "low_pop_tracts.Rdata"))
+load(file = here(path_onedrive, "geoid_crosswalk.Rdata"))
+load(file = here(path_onedrive,'phila_tracts_age_grp_5_sexes_years.Rdata'))
+load(file = here(path_onedrive,'phila_tracts_ages_sexes_years.Rdata'))
+load(file = here(path_onedrive, "phila_sf.Rdata"))
+load(file = here(path_onedrive, "phila_sf_cross.Rdata"))
+load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
 
 # All tracts in Philly
 phila_tracts <- phila_sf$GEOID %>% unique
@@ -58,7 +59,7 @@ phila_pop_age_sex <- function(df) {
 # Replace with your own SEER URL after requesting access for data at https://seer.cancer.gov/censustract-pops/request.html
 seer_url <- ""
 
-seer_destfile <- paste0(data, "seer_tract_pop.txt.gz")
+seer_destfile <- here(data, "seer_tract_pop.txt.gz")
 
 # Only attempt download if a non-empty URL is provided; otherwise rely on an existing local file
 if (nzchar(seer_url)) {
@@ -72,7 +73,7 @@ if (nzchar(seer_url)) {
 }
 
 # SEER population by sex x tract x age group
-phila_pop_age_grp_seer <- read_lines("./Data/seer_tract_pop.txt.gz") %>% # Old: us.2006_2022.tract.level.pops.txt
+phila_pop_age_grp_seer <- read_lines(here(data, "seer_tract_pop.txt.gz")) %>% # Old: us.2006_2022.tract.level.pops.txt
   enframe(name = NULL, value = "data") %>%
   mutate(state = substr(data, 5, 6),
          stateFIPS = substr(data, 7, 8),
@@ -296,8 +297,11 @@ phila_pop_seer_no_pop_maps <-
 phila_pop_seer_no_pop_maps
 
 # Save map
-ggsave(filename = paste0(working_results,"phila_pop_seer_no_pop_maps.png"), plot = phila_pop_seer_no_pop_maps, 
-       device = "png", width = 15, height = 13)
+ggsave(filename = here(working_results, "phila_pop_seer_no_pop_maps.png"), 
+       plot = phila_pop_seer_no_pop_maps, 
+       device = "png", 
+       width = 15, 
+       height = 13)
 
 # Save cleaned up population data
 save(phila_pop_age_grp_seer, phila_pop_age_seer, 
@@ -305,4 +309,4 @@ save(phila_pop_age_grp_seer, phila_pop_age_seer,
      phila_pop_age_grp_seer_all_fixes, phila_pop_seer_total_all_fixes,
      phila_pop_age_seer_all_fixes, phila_pop_seer_tract_sex_total_all_fixes, 
      phila_pop_seer_total_all_fixes,
-     file = paste0(path_onedrive, "phila_pop_seer.rdata"))
+     file = here(path_onedrive, "phila_pop_seer.rdata"))
