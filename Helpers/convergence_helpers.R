@@ -1,0 +1,81 @@
+#' Create traceplots of parameters from nimble
+#'
+#' @param data Dataframe of parameter values with iterations in columns
+#' @param group_vars Character vector indicating levels at which parameters are grouped
+#' @param facet_var Character vector indicating what numbers in parameter names represent
+#' @param value_lab Character input for y-axis label
+#'
+#' @return List of traceplots by groupings
+
+make_traceplots <- function(
+  data,
+  group_vars,
+  facet_var = "sex_years_lab",
+  value_lab = "Value"
+) {
+  iter_cols <- grep("^iter_", names(data), value = TRUE)
+
+  split_data <- data %>%
+    group_by(across(all_of(group_vars))) %>%
+    group_split()
+
+  keys <- data %>%
+    group_by(across(all_of(group_vars))) %>%
+    group_keys()
+
+  map2(
+    split_data,
+    seq_len(nrow(keys)),
+    ~ {
+      title <- paste(
+        names(keys),
+        unlist(keys[.y, ]),
+        sep = "=",
+        collapse = ", "
+      )
+
+      plot_df <- map_dfr(
+        seq_len(nrow(.x)),
+        function(i) {
+          tibble(
+            iteration = seq_along(iter_cols),
+            value = as.numeric(.x[i, iter_cols]),
+            facet = .x[[facet_var]][i]
+          )
+        }
+      )
+
+      ggplot(plot_df, aes(iteration, value)) +
+        geom_line(alpha = 0.7) +
+        facet_wrap(~facet) +
+        theme_bw() +
+        labs(
+          title = title,
+          x = "Iteration",
+          y = value_lab
+        )
+    }
+  )
+}
+
+#' Compute effective sample size (ESS) of nimble parameters
+#'
+#' @param data Dataframe of parameter values with iterations in columns
+#'
+#' @return Dataframe including ESS for each parameter
+
+compute_ess <- function(data) {
+  iter_cols <- grep("^iter_", names(data), value = TRUE)
+
+  data %>%
+    rowwise() %>%
+    mutate(
+      ess = effectiveSize(
+        mcmc(
+          c_across(all_of(iter_cols))
+        )
+      )
+    ) %>%
+    ungroup() %>%
+    select(-iter_cols)
+}

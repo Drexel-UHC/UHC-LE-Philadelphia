@@ -47,10 +47,10 @@ library(here)
 tmap_mode("view")
 
 # Load data
-load(here("Quarto", "Data", "le_birth.Rdata"))
-load(here("Quarto", "Data", "le_change_sf.Rdata"))
-load(here("Quarto", "Data", "post_prob_sf.Rdata"))
-load(here("Quarto", "Data", "le_by_decile.Rdata"))
+load(here("Quarto", "Data", "le_birth_20260701.Rdata"))
+load(here("Quarto", "Data", "le_change_sf_20260707.Rdata"))
+load(here("Quarto", "Data", "post_prob_sf_20260707.Rdata"))
+load(here("Quarto", "Data", "le_by_decile_20260702.Rdata"))
 
 # Convert data to sf
 le_birth_sf <- st_as_sf(le_birth)
@@ -63,9 +63,16 @@ make_maps <- function(sex_input, yr_input, measure) {
     
     # Prep data
     d <- le_birth_sf %>% filter(sex == sex_input, years == yr_input) %>%
-      mutate(val = round(med,2),
-             popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
-             GEOID_str = as.character(GEOID))
+      mutate(
+        val = round(med,2),
+        popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
+        GEOID_str = as.character(GEOID),
+        popup_text = paste0(
+          "GEOID: ", GEOID_str, "<br>",
+          "LE (95% CI): ", round(med,2), " (", round(lci,2), ", ", round(uci,2), ")"
+          )
+        )
+
     
     # Compute Jenks breaks for LE at birth
     n_breaks <- 5
@@ -76,6 +83,12 @@ make_maps <- function(sex_input, yr_input, measure) {
     
     # Legend title
     legend <- "LE (Years)"
+    
+    # Popul label
+    popup_label <- "LE (95% CI)"
+    
+    # Map title
+    title <- paste0(sex_input, " - ", yr_input)
     
     # Polygon fill settings
     scale <- tm_scale_intervals(style = "fixed", 
@@ -88,9 +101,15 @@ make_maps <- function(sex_input, yr_input, measure) {
     
     # Prep data
     d <- le_change_sf %>% filter(sex == sex_input) %>%
-      mutate(val = round(med,2),
-             popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
-             GEOID_str = as.character(GEOID))
+      mutate(
+        val = round(med,2),
+        popup = paste0(round(med,2)," (",round(lci,2),", ",round(uci,2),")"),
+        GEOID_str = as.character(GEOID),
+        popup_text = paste0(
+          "GEOID: ", GEOID_str, "<br>",
+          "Change in LE (Years) (95% CI): ", round(med,2), " (", round(lci,2), ", ", round(uci,2), ")"
+          )
+        )
     
     # Compute Jenks breaks for change in LE at birth
     n_breaks <- 5
@@ -101,6 +120,12 @@ make_maps <- function(sex_input, yr_input, measure) {
     
     # Legend title
     legend <- "Change in LE (Years)"
+    
+    # Popup label
+    popup_label <- "Change in LE (Years)"
+    
+    # Map title
+    title <- paste0(sex_input)
     
     # Polygon fill settings
     scale <- tm_scale_intervals(style = "fixed",
@@ -114,15 +139,27 @@ make_maps <- function(sex_input, yr_input, measure) {
     # Prep data
     d <- post_prob_sf %>% 
       filter(sex == sex_input) %>%
-      mutate(val = round(prob_decr,2), 
-             popup = paste0(round(prob_decr,1),"%"),
-             GEOID_str = as.character(GEOID))
+      mutate(
+        val = round(prob_decr,2),
+        popup = paste0(round(prob_decr,1),"%"),
+        GEOID_str = as.character(GEOID),
+        popup_text = paste0(
+          "GEOID: ", GEOID_str, "<br>",
+          "Pr(Decrease in LE): ",round(prob_decr,1),"%"
+          )
+        )
     
     # Color palette
     pal <- brewer.pal(7,"RdBu")[7:1]
     
     # Legend title
     legend <- "Posterior Probability"
+    
+    # Popup label
+    popup_label <- "Pr(Decrease in LE)"
+    
+    # Map title
+    title <- paste0(sex_input)
     
     # Polygon fill settings
     scale <- tm_scale_intervals(style = "fixed", 
@@ -133,14 +170,24 @@ make_maps <- function(sex_input, yr_input, measure) {
   }
 
   # Create maps
-  tm_shape(d) +
+  tm_shape(
+    d  %>%
+      group_by(GEOID_str) %>%
+      summarise(
+        val   = first(val),
+        popup = first(popup),
+        .groups = "drop"
+        ) %>%
+      select(-GEOID) %>%
+      rename(GEOID = GEOID_str)) +
   tm_polygons(
     fill = "val",
     fill.scale = scale,
-    popup.vars = c("GEOID" = "GEOID_str", legend = "popup"),
+    popup.vars = setNames("popup", popup_label),
     fill.legend = tm_legend(title = legend)
   ) +
-  tm_borders() +
+  tm_borders(popup.vars = NULL) +
+  tm_title(title) +
   tm_layout(
     inner.margins = 0,
     legend.position = c("right","bottom")
@@ -227,24 +274,17 @@ library(highcharter)
 load("Data/le_by_decile.Rdata")
   
 # Function to create plots
-make_decile_plot_hc <- function(statistic, age_input, yr_input) { 
+make_decile_plot_hc <- function(statistic, age_input, sex_input) { 
   
   # Filter data 
   filtered_data <- le_by_decile %>%
-    filter(Age == age_input, years == yr_input)
+    filter(Age == age_input, Sex == sex_input)
   
   # Select variables based on statistic
-  if (statistic == "Mean") { 
-    yvar <- "le"
-    lci  <- "le_lci"
-    uci  <- "le_uci"
-    ylab <- "Mean LE"
-  } else { 
-    yvar <- "sd"
-    lci  <- "sd_lci"
-    uci  <- "sd_uci"
-    ylab <- "SD of LE"
-  }
+  yvar <- "le"
+  lci  <- "le_lci"
+  uci  <- "le_uci"
+  ylab <- "Mean LE"
   
   # Text for tooltip
   filtered_data <- filtered_data %>%
@@ -260,12 +300,12 @@ make_decile_plot_hc <- function(statistic, age_input, yr_input) {
     )
 
   # Colors
-  colors <- c("Men" = "#1f77b4", "Women" = "#ff7f0e") 
+  colors <- c("2017-2019" = "#1f77b4", "2020-2022" = "#ff7f0e") 
   
   # Create plot using highcharter
   hc <- highchart() |> 
     hc_chart(type = "line") |> 
-    hc_title(text = paste0(ylab, " by Income Decile in Philadelphia (", yr_input, ")")) |> 
+    hc_title(text = paste0(ylab, " by Income Decile in Philadelphia (", sex_input, ")")) |> 
     hc_xAxis(categories = 1:10, title = list(text = "Income Decile")) |> 
     hc_yAxis(title = list(text = ylab)) |> 
     hc_tooltip(
@@ -287,14 +327,22 @@ make_decile_plot_hc <- function(statistic, age_input, yr_input) {
     )
 
   # Plot lines and credible intervals
-  for (sx in c("Men", "Women")) {
+  for (yrs in c("2017-2019", "2020-2022")) {
     
     # Filter data
-    d <- filtered_data %>% filter(Sex == sx)
+    d <- filtered_data %>% filter(years == yrs)
     
+    # LM for SII
+    lm_fit <- lm(le ~ decile_income, data = d)
+    
+    lm_df <- d %>%
+      mutate(
+        le_fitted = predict(lm_fit, newdata = d)
+      ) 
+
     # Update plot
     hc <- hc |>
-      # Line (central estimate)
+      # Central estimate line
       hc_add_series(
         data = d,
         type = "line",
@@ -302,10 +350,10 @@ make_decile_plot_hc <- function(statistic, age_input, yr_input) {
           x = decile_income,
           y = .data[[yvar]],
           tooltip = tooltip_str
-        ),
-        name = sx,
-        color = colors[sx]
-      ) |>
+          ),
+        name = sex_input,
+        color = colors[yrs]
+        ) |>
       # CI ribbon
       hc_add_series(
         data = d,
@@ -314,11 +362,25 @@ make_decile_plot_hc <- function(statistic, age_input, yr_input) {
           x = decile_income,
           low = .data[[lci]],
           high = .data[[uci]]
-        ),
-        color = colors[sx],
+          ),
+        color = colors[yrs],
         showInLegend = FALSE
+        ) |>
+      # linear trend (geom_smooth equivalent)
+      hc_add_series(
+        data = lm_df,
+        type = "line",
+        hcaes(
+          x = decile_income,
+          y = le_fitted
+          ),
+        name = paste0(sex_input, " (SII)"),
+        color = colors[yrs],
+        dashStyle = "Dash",
+        marker = list(enabled = FALSE),
+        enableMouseTracking = FALSE
       )
-  }
+    }
   hc
 }
 
@@ -339,27 +401,8 @@ These plots depict mean life expectancy at birth by deciles of median household 
 #| cache: false
 #| layout-ncol: 2
 
-make_decile_plot_hc("Mean", 0, "2017-2019")
-make_decile_plot_hc("Mean", 0, "2020-2022")
-
-```
-
-### Standard Deviation of Life Expectancy at Birth by Income Decile
-
-These plots depict the standard deviation of life expectancy at birth by deciles of median household income.
-
-```{r}
-#| label: le_decile_sd_plots
-#| echo: true
-#| warning: false
-#| message: false
-#| code-fold: true
-#| output: true
-#| cache: false
-#| layout-ncol: 2
-
-make_decile_plot_hc("Standard Deviation", 0, "2017-2019")
-make_decile_plot_hc("Standard Deviation", 0, "2020-2022")
+make_decile_plot_hc("Mean", 0, "Men")
+make_decile_plot_hc("Mean", 0, "Women")
 
 ```
 

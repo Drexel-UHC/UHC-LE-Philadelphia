@@ -1,7 +1,7 @@
-
 # Load Libraries & Data ---------------------------------------------------
 
-rm(list=ls())
+
+rm(list = ls())
 library(here)
 library(tidyverse)
 library(DemoTools)
@@ -10,7 +10,9 @@ library(spdep)
 library(future)
 library(furrr)
 library(nimble)
-library(classInt)
+library(data.table)
+library(matrixStats)
+library(coda)
 
 # Create variable to house directory paths
 results <- here("Results")
@@ -18,341 +20,324 @@ working_results <- here(results, "Working Results")
 dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
 path_onedrive <- here("Data - Cleansed")
 
-# Load data
+# Load data created in 01-Crosswalks
 load(file = here(path_onedrive, "phila_sf.Rdata"))
-load(file = here(path_onedrive,'sex_years.Rdata'))
-load(file=here(path_onedrive,'tract_ids.RData'))
-load(file = here(dir_name, "Philly LE", "phila_death_rates.Rdata"))
+load(file = here(path_onedrive, "sex_years.Rdata"))
+load(file = here(path_onedrive, "tract_ids.RData"))
+
+# Load data created in 04-Mortality-Rates
+load(file = here(dir_name, "Philly LE", "phila_death_rates_20260710.Rdata"))
 
 # Age groups for model
-age_limit<-85
+age_limit <- 85
 ages <- seq(from = 0, to = age_limit, by = 1)
+
+# Today's date, formatted for file saving
+date <- format(Sys.Date(), "%Y%m%d")
+
+# Load helper functions
+source(here("Helpers", "nimble_helpers.R"))
+source(here("Helpers", "extract_params.R"))
+source(here("Helpers", "convergence_helpers.R"))
+source(here("Helpers", "lt_helpers.R"))
 
 
 # Run Nimble Models -------------------------------------------------------
 
-# Start parallel processing 
-plan(multisession, .cleanup = T, workers = 4); gc()
 
-# Start time of nimble models
-nimble_start <- Sys.time()
+# Adjacency
+phila_adj <- poly2nb(phila_sf, queen = TRUE)
+adj_vec <- unlist(phila_adj)
 
-# Run nimble models - one on each core
-nimble_results_seer <- future_map(c(1,2,3,4), function(sex_years_var, .options=furrr_options(seed=TRUE)){
-    
-    set.seed(1234)
-  
-    deaths <- phila_death_rates_age_tract %>% filter(sex_years == sex_years_var) %>%
-      ungroup() %>% select(GEOID, age, deaths, tract) %>%  spread(age, deaths) %>% 
-      arrange(tract) %>% select(-tract)
-    
-    pop <- phila_death_rates_age_tract %>% filter(sex_years == sex_years_var) %>% 
-      ungroup() %>% select(GEOID, age, pop, tract) %>% spread(age, pop) %>% 
-      arrange(tract) %>% select(-tract)
-    
-    Y <- deaths %>% select(-c(GEOID)) %>% data.matrix()
-    
-    n <- pop %>% select(-c(GEOID)) %>% data.matrix()
-    
-    lambda_star <-  loess(log_rate ~ age, data=filter(phila_death_rates_age, sex_years == sex_years_var), degree = 2, span = 0.25)$fitted
-    
-    # Number of age groups 
-    N_ages <- length(ages)
-    
-    #All tracts in Philly
-    phila_tracts <- unique(phila_sf$GEOID)
-    
-    # Number of census tracts in Philly
-    N_tracts <- length(phila_tracts)
-    
-    # Spline knot locations
-    knot_loc<-c(0, 1, 10, 20, 40, 70)
-    
-    # B-spline basis matrix
-    coef   = bs(as.numeric(ages), knots=c(0,1,10,20,40,70), degree=1)
-    
-    # Number of spline knots
-    N_knots<-length(knot_loc)+1
-    
-    #Adjacency 
-    phila_adj <- poly2nb(phila_sf, queen = T)
-    NumCells = length(phila_adj)
-    num = sapply(phila_adj,length)
-    adj = unlist(phila_adj)
-    sumNumNeigh = length(unlist(phila_adj))
-    
-    #Initial MCMC values
-    inits <- function() {
-      list(tau=as.integer(rep(100, times=N_knots)),
-           tauns=as.integer(rep(100, times=N_knots)),
-           betaij=array(0, dim=c( N_knots,N_tracts)),
-           nonspat=array(0, dim=c(N_tracts, N_knots)),
-           beta0 = rep(0,N_knots))
-    }
-    
-    # Parameters to save
-    parameters= c("lambda","tau","tauns","beta0", "betaij","nonspat")
-    
-    #Nimble data and constants
-    nimble_data <- list(Y = as.matrix(Y))
-    nimble_constants <- list(n = as.matrix(n),
-                                       lambda_star=exp(lambda_star),
-                                       N_knots=N_knots,
-                                       coef=coef,
-                                       N_tracts=N_tracts,
-                                       N_ages=N_ages,
-                                       sumNumNeigh=sumNumNeigh, num=num, adj=adj)
-    
-    # Nimble model
-    nimble_model <- nimbleCode({
-      for(i in 1:N_tracts){ 
-        for(k in 1:N_ages){
-          Y[i,k] ~ dpois(theta[i,k])
-          theta[i,k] <- n[i,k] * lambda[i,k]  
-          lambda[i,k] <- lambda_star[k]*exp(inprod(betas[i,], coef[k,])) 
-        }
-        
-        for (j in 1:N_knots){
-          betas[i,j] <- beta0[j] + nonspat[i,j] + betaij[j,i]
-          nonspat[i,j] ~ dnorm(0,inv_tauns[j]) # BUGS/Nimble uses precision
-        }
-      } 
-      
-      for(j in 1:N_knots){
-        betaij[j,1:N_tracts] ~ dcar_normal(adj[], weights[], num[], inv_tau[j], zero_mean = 1) # BUGS/Nimble uses precision
-        beta0[j] ~ dnorm(0, 0.001)
-        inv_tau[j] ~ dgamma(1, 0.14) 
-        tau[j] <- 1/inv_tau[j]
-        inv_tauns[j] ~ dgamma(1, 0.01) 
-        tauns[j] <- 1/inv_tauns[j]
-      }
-      
-      for(h in 1:sumNumNeigh) {
-        weights[h] <- 1
-      }
-    })
-    
-    # Run model
-    nimble_output <- nimbleMCMC(
-      code = nimble_model,
-      dimensions = list(betas=c(N_tracts, N_knots), weights=c(sumNumNeigh), coef=c(N_ages, N_knots)),
-      data = nimble_data,
-      constants = nimble_constants,
-      inits = inits,
-      monitors = parameters, 
-      niter = 50000,
-      nburnin = 25000,
-      thin = 10)
+# Basis matrix
+knot_loc <- c(0, 1, 10, 20, 40, 70)
+coef <- bs(as.numeric(ages), knots = knot_loc, degree = 1)
 
-    list(output=nimble_output)
-    
-}, .progress=T)
+nimble_config <- list(
+  dims = list(
+    N_ages = nrow(coef),
+    N_knots = ncol(coef),
+    N_tracts = length(phila_adj)
+  ),
+  coef = coef,
+  adj = list(
+    num = sapply(phila_adj, length),
+    adj = adj_vec,
+    sumNumNeigh = length(adj_vec)
+  ),
+  mcmc = list(
+    niter = 50000,
+    nburnin = 25000,
+    thin = 10
+  )
+)
 
-# End time of nimble models
-nimble_end <- Sys.time()
+nimble_results <- run_nimble_parallel(
+  death_rates_tract = phila_death_rates$death_rates_age_tract,
+  death_rates_age   = phila_death_rates$death_rates_age,
+  config            = nimble_config,
+  label             = "Main",
+  save_path         = here(path_onedrive, paste0("nimble_results_", date, ".Rdata")),
+  obj_name          = "nimble_results"
+)
+# Main nimble models took 4.04 hours to run.
 
-# Print time to run nimble models
-cat("Nimble models took ", difftime(nimble_end, nimble_start), ' hours to run. \n') # Nimble models took  2.264729  hours to run. 
-
-# End parallel processing
-plan(sequential)
-
-# Save results for later use
-save(nimble_results_seer, 
-     file=here(path_onedrive, "nimble_results_seer_20250117.Rdata"))
+nimble_results_no_pop_adjust <- run_nimble_parallel(
+  death_rates_tract = phila_death_rates_no_pop_adjust$death_rates_age_tract,
+  death_rates_age   = phila_death_rates_no_pop_adjust$death_rates_age,
+  config            = nimble_config,
+  label             = "No population adjustments",
+  save_path         = here(path_onedrive, paste0("nimble_results_no_pop_adjust_", date, ".Rdata")),
+  obj_name          = "nimble_results_no_pop_adjust"
+)
+# No population adjustments nimble models took 3.69 hours to run.
 
 
 # Lambdas ----------------------------------------------------------------
 
-# Load nimble results created above, and mortality rates created in 03-Mortality Rates
-load(file=here(path_onedrive, "nimble_results_seer_20250117.Rdata"))
-load(file = here(dir_name, "Philly LE", "phila_death_rates.Rdata"))
 
-# Extract lambdas by iteration
-lambdas_nimble <- do.call(rbind, lapply(seq_along(nimble_results_seer), function(i) {
-  # Get the output from the nimble results
-  x <- nimble_results_seer[[i]]
-  # lambda columns
-  cols <- grep("^lambda", colnames(x$output))
-  # lambda matrix
-  lambdas_mat <- x$output[,cols]
-  return(cbind(iteration = 1:nrow(lambdas_mat), sex_years = rep(i, nrow(lambdas_mat)),lambdas_mat))
-  })) %>%
-  as_tibble() %>%
-  pivot_longer(cols = starts_with("lambda"), 
-                       names_to = "varid", 
-                       values_to = "rate") %>%
-  mutate(tract = as.numeric(sub(".*?\\[(\\d+).*", "\\1", varid)),
-         age = as.numeric(sub(".*?,\\s*(\\d+).*", "\\1", varid))-1) %>% 
-  select(-varid) %>%
-  inner_join(tract_ids) %>%
-  inner_join(sex_years) %>%
-  arrange(sex_years, GEOID, age, iteration)
+load(file = here(path_onedrive, "nimble_results_20260708.Rdata"))
+lambdas <- extract_param(
+  nimble_results = nimble_results,
+  param          = "lambda",
+  index_names    = c("tract", "age"),
+  tract_ids      = tract_ids,
+  sex_years_df   = sex_years,
+  save_path      = here(path_onedrive, paste0("lambdas_", date, ".Rdata")),
+  obj_name       = "lambdas"
+)
 
-# Free unused memory and save results
-gc(); save(lambdas_nimble, 
-           file = here(path_onedrive,'lambdas_nimble_20250117.Rdata'))
+load(file = here(path_onedrive, "nimble_results_no_pop_adjust_20260706.Rdata"))
+lambdas_no_pop_adjust <- extract_param(
+  nimble_results = nimble_results_no_pop_adjust,
+  param          = "lambda",
+  index_names    = c("tract", "age"),
+  tract_ids      = tract_ids,
+  sex_years_df   = sex_years,
+  save_path      = here(path_onedrive, paste0("lambdas_no_pop_adjust_", date, ".Rdata")),
+  obj_name       = "lambdas_no_pop_adjust"
+)
 
 # Median log lambdas (thetas) and their 95% credible intervals
-thetas_med_ci <- lambdas_nimble %>%
-  mutate(log_lambda = log(rate)) %>%
-  group_by(GEOID, sex_years, sex_years_lab, age) %>%
-  summarise(med = median(log_lambda), lci = quantile(log_lambda, probs = 0.025), uci = quantile(log_lambda, probs = 0.975)) %>%
-  inner_join(phila_death_rates_age %>% select(c("sex_years", "sex_years_lab", "age", "log_rate", "theta_star")), 
-             by = c("sex_years", "sex_years_lab", "age")) %>%
-  inner_join(phila_death_rates_age_tract %>% select(c("GEOID", "sex_years", "sex_years_lab", "age", "pop", "deaths")),
-             by = c("GEOID", "sex_years", "sex_years_lab", "age")) %>%
-  mutate(offset = med - theta_star,
-         offset_lci = lci - theta_star,
-         offset_uci = uci - theta_star,
-         crude = case_when(
-           deaths == 0 ~ NA_real_,
-           pop == 0 ~ NA_real_,
-           TRUE ~ log(deaths/pop)),
-         knot = case_when(
-           age %in% c(0, 1, 10, 20, 40, 70, 85) ~ age,
-           TRUE ~ NA_real_),
-         rug = case_when(
-           deaths == 0 ~ age,
-           TRUE ~ NA_real_)) %>%
-  ungroup()
+iter_mat <- as.matrix(select(lambdas, starts_with("iter_")))
 
-# Free unused memory and save results for later use
-gc(); save(thetas_med_ci, 
-           file = here(path_onedrive,'thetas_med_ci_20250117.Rdata'))
+log_mat <- log(iter_mat)
+
+thetas_med_ci <- lambdas %>%
+  mutate(
+    med = rowMedians(log_mat),
+    lci = rowQuantiles(log_mat, probs = 0.025),
+    uci = rowQuantiles(log_mat, probs = 0.975)
+  ) %>%
+  select(-starts_with("iter_"))
+
+save(
+  thetas_med_ci,
+  file = here(path_onedrive, paste0("thetas_med_ci_", date, ".Rdata"))
+)
 
 
 # Model Convergence -------------------------------------------------------
 
-# Load lambdas created above
-load(file = here(path_onedrive,'lambdas_nimble_20250117.Rdata'))
 
-# Trace plots
-lambda_convergence <- lambdas_nimble %>%
-  filter(age %in% c(0, 5, 10, 20, 30, 45, 70, 75, 85)) %>% # Don't need to look at all ages -- just take sample of knots and betwee-knots
-  group_by(GEOID, age) %>%
-  group_map(~{
-    ggplot(.x, aes(x=iteration, y=rate))+
-      geom_line()+
-      theme_bw()+
-      facet_wrap(~sex_years_lab)+
-      ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
-  })
+# Load nimble results and lambdas
+load(file = here(path_onedrive, "nimble_results_20260708.Rdata"))
+load(here(path_onedrive, "lambdas_20260708.Rdata"))
 
-# Save as PDF
-pdf(file = here(working_results,"lambda_convergence_20250117.pdf"))
-lambda_convergence
+# Extract intercepts (beta0s)
+beta0 <- extract_param(
+  nimble_results,
+  param = "beta0",
+  index_names = "knot",
+  sex_years_df = sex_years
+)
+
+# beta0 traceplots
+pdf(
+  here(working_results, "beta0_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  data       = beta0,
+  group_vars = c("knot"),
+  value_lab  = expression(beta[0])
+) %>%
+  walk(print)
+
 dev.off()
 
-# Remove from global environment and free unused memory
-rm(lambda_convergence); gc()
+# beta0 ESS
+beta0_ess <- compute_ess(beta0)
 
-# Density plots
-lambda_density <- lambdas_nimble %>%
-  filter(age %in% c(0, 20, 40, 70)) %>%
-  group_by(GEOID, age) %>%
-  group_map(~{
-    ggplot(.x)+
-      geom_density(aes(x=rate))+
-      theme_bw()+
-      facet_wrap(~sex_years_lab)+
-      ggtitle(paste0("Tract ", .y$GEOID, ", Age ", .y$age))
-  })
+# Extract spatial random effects
+betaij <- extract_param(
+  nimble_results,
+  param = "betaij",
+  index_names = c("knot", "tract"),
+  tract_ids = tract_ids,
+  sex_years_df = sex_years
+)
 
-# Save as PDF
-pdf(file = here(working_results,"lambda_density_20250117.pdf"))
-lambda_density
+# Spatial random effects traceplots
+pdf(
+  here(working_results, "betaij_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  betaij,
+  group_vars = c("GEOID", "knot"),
+  value_lab = expression(beta[spat])
+) %>%
+  walk(print)
+
 dev.off()
 
-# Remove from global environment and free unused memory
-rm(lambda_density); gc()
+# Extract nonspatial random effects
+nonspat <- extract_param(
+  nimble_results,
+  param = "nonspat",
+  index_names = c("tract", "knot"),
+  tract_ids = tract_ids,
+  sex_years_df = sex_years
+)
+
+# Nonspatial random effects traceplots
+pdf(
+  here(working_results, "nonspat_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  nonspat,
+  group_vars = c("GEOID", "knot"),
+  value_lab = expression(beta[nonspat])
+) %>%
+  walk(print)
+
+dev.off()
+
+# Extract spatial variance parameters
+tau <- extract_param(
+  nimble_results,
+  param = "tau",
+  index_names = "knot",
+  sex_years_df = sex_years
+)
+
+# Spatial variance traceplots
+pdf(
+  here(working_results, "tau_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  tau,
+  group_vars = c("knot"),
+  value_lab = expression(tau)
+) %>%
+  walk(print)
+
+dev.off()
+
+# Spatial variance ESS
+tau_ess <- compute_ess(tau)
+
+# Extract nonspatial variance parameters
+tauns <- extract_param(
+  nimble_results,
+  param = "tauns",
+  index_names = "knot",
+  sex_years_df = sex_years
+)
+
+# Nonspatial variance traceplots
+pdf(
+  here(working_results, "tauns_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  tauns,
+  group_vars = c("knot"),
+  value_lab = expression(tau[ns])
+) %>%
+  walk(print)
+
+dev.off()
+
+# Nonspatial variance ESS
+tauns_ess <- compute_ess(tauns)
+
+# Lambda traceplots
+pdf(
+  here(working_results, "lambda_traceplots.pdf"),
+  width = 10,
+  height = 8
+)
+
+make_traceplots(
+  lambdas,
+  group_vars = c("GEOID", "age"),
+  value_lab = expression(lambda)
+) %>%
+  walk(print)
+
+dev.off()
+
+# Lambda ESS
+lambda_ess <- compute_ess(lambdas)
 
 
 # Life Expectancy ---------------------------------------------------------
 
-# Clear global environment and free unused memory
-rm(list=ls()); gc()
 
-# Filepath
-path_onedrive <- here("Data - Cleansed")
+load(here(path_onedrive, "lambdas_20260708.Rdata"))
+le_nimble <- run_lt_parallel(
+  lambdas,
+  label = "Main",
+  save_path = here(path_onedrive, paste0("le_nimble_", date, ".Rdata")),
+  obj_name = "le_nimble"
+)
+# Main lifetable calculations took 5.63 hours to run.
 
-# Load lambdas created above
-load(file = here(path_onedrive,'lambdas_nimble_20250117.Rdata')); gc()
+load(here(path_onedrive, "lambdas_no_pop_adjust_20260707.Rdata"))
+le_nimble_no_pop_adjust <- run_lt_parallel(
+  lambdas_no_pop_adjust,
+  label = "No pop adjust",
+  save_path = here(path_onedrive, "le_nimble_no_pop_adjust_20260707.Rdata"),
+  obj_name = "le_nimble_no_pop_adjust"
+)
+# No pop adjust lifetable calculations took 5.38 hours to run.
 
-# Splitting lambdas to send a smaller amount to each core. Because we have 2 time periods for men and women, we can send each combination to a separate core
-lambdas_split <- lambdas_nimble %>%
-  group_split(sex_years)
-
-names(lambdas_split) <- unique(lambdas_nimble$sex_years)
-
-# Remove original lambdas dataframe from global environment and clear memory
-rm(lambdas_nimble); gc()
-
-# Start time of lifetable calcs
-le_start <- Sys.time()
-
-# Start parallel processing - change if you want to use a different number of cores
-plan(multisession, .cleanup = T, workers = 4); gc()
-
-# Parallel processing of lifetable construction
-le_nimble <- future_map(
-  lambdas_split,
-  function(df) {
-    df %>%
-      group_by(GEOID, iteration) %>%
-      group_map(~{
-        ages  <- as.numeric(.x$age)
-        rates <- as.numeric(.x$rate)
-        
-        lt_single_mx(nMx = rates, Age = ages) %>%
-          mutate(
-            GEOID     = .y$GEOID,
-            iteration = .y$iteration,
-            sex_years = unique(.x$sex_years)
-          ) %>%
-          select(Age, ex, GEOID, sex_years, iteration)
-      })
-  },
-  .options = furrr_options(seed = TRUE),
-  .progress = TRUE
+le_iter_df <- build_le_iter(
+  le_list = le_nimble,
+  sex_years_df = sex_years,
+  save_path = here(path_onedrive, paste0("le_iter_df_", date, ".Rdata")),
+  obj_name = "le_iter_df"
 )
 
-# End time of lifetable calcs
-le_end <- Sys.time()
+le_iter_df_no_pop_adjust <- build_le_iter(
+  le_list = le_nimble_no_pop_adjust,
+  sex_years_df = sex_years,
+  save_path = here(path_onedrive, paste0("le_iter_df_no_pop_adjust_", date, ".Rdata")),
+  obj_name = "le_iter_df_no_pop_adjust"
+)
 
-# Print time to run lifetables
-cat("Lifetable calculations took ", difftime(le_end, le_start), ' hours to run. \n') # Lifetable calculations took  2.902934  hours to run.
+le_df <- summarise_le_ci(
+  df = le_iter_df,
+  save_path = here(path_onedrive, paste0("le_df_", date, ".Rdata")),
+  obj_name = "le_df"
+)
 
-# End parallel processing
-plan(sequential)
-
-# Free unused memory and save results for later use
-gc(); save(le_nimble,
-           file=here(path_onedrive, "le_nimble_20250117.Rdata"))
-
-# Load crosswalk
-load(file = here(path_onedrive,'sex_years.Rdata'))
-
-# Dataframe of LE by iteration
-le_iter_nimble <- tibble(do.call(rbind,do.call(rbind,le_nimble))) %>%
-  rename(le = ex) %>%
-  inner_join(sex_years) %>%
-  select(GEOID, iteration, Age, sex, years, le) %>%
-  mutate(GEOID = as.numeric(GEOID)) %>%
-  filter((Age==0)|(Age==25)|(Age==65))
-
-# Free unused memory and save results for later use
-gc(); save(le_iter_nimble,
-           file=here(path_onedrive, "le_iter_nimble_20250117.Rdata"))
-
-# Point estimates and 95% CIs for LE
-le_df_nimble <- le_iter_nimble %>%
-  arrange(GEOID, Age, sex, years, iteration) %>%
-  group_by(GEOID, Age, sex, years) %>%
-  summarise(lci = quantile(le, probs = c(.025), na.rm = TRUE),
-            med = quantile(le, probs = c(.5), na.rm = TRUE),
-            uci = quantile(le, probs = c(.975), na.rm = TRUE))
-
-# Free unused memory and save resultsfor later use
-gc(); save(le_df_nimble,
-           file=here(path_onedrive, "le_df_nimble_20250117.Rdata"))
+le_df_no_pop_adjust <- summarise_le_ci(
+  df = le_iter_df_no_pop_adjust,
+  save_path = here(path_onedrive, paste0("le_df_no_pop_adjust_", date, ".Rdata")),
+  obj_name = "le_df_no_pop_adjust"
+)
