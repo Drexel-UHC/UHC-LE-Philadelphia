@@ -7,7 +7,7 @@
 #' @return Dataframe of parameter values with iterations in columns
 
 compute_le_change <- function(
-  df,
+  le_df,
   value = "le",
   iteration = TRUE
 ) {
@@ -17,7 +17,7 @@ compute_le_change <- function(
     group_vars <- c(group_vars, "iteration")
   }
 
-  df %>%
+  le_df %>%
     set_lowpop_na(value) %>%
     pivot_wider(
       names_from = years,
@@ -30,5 +30,6 @@ compute_le_change <- function(
       t2 = sum(`2020-2022`, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    mutate(change = t2 - t1)
+    mutate(change = t2 - t1) %>%
+    set_lowpop_na("change")
 }

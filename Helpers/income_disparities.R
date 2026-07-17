@@ -1,66 +1,32 @@
 #' Compute income-based disparities in life expectancy
 #'
 #' @param le_df Dataframe containing iteration-level life expectancy estimates
-#' @param pop_df Dataframe containing population estimates at the same level as life expectancy
-#' @param outcome Character string indicating the outcome to analyze -- either `"le"` or `"change"`
 #' @param deciles Logical indicating whether disparities should be calculated using the 10th and 90th weighted percentiles (`TRUE`) or using the 5th and 95th weighted percentiles (`FALSE`)
 #'
 #' @returns A dataframe containing medians and 95% CIs of SII and RII estimates
 
 income_disparities <- function(
   le_df,
-  pop_df,
-  outcome = "le",
   deciles = TRUE
 ) {
-  is_change <- outcome == "change"
 
-  # Outcome-specific rank variable
   rank_var <- if (deciles) "decile_income1" else "ventile_income1"
   prefix <- if (deciles) "decile_" else "ventile_"
 
-  # Filter outcome
+  # Filter away NA le
   le_df <- le_df %>%
-    filter(!is.na(.data[[outcome]]))
+    filter(!is.na(.data[["le"]]))
 
-  # Setup based on outcome
-  if (is_change) {
-    pop_used <- pop_df %>%
-      filter(years == "2017-2019")
-
-    join_vars <- c("GEOID", "sex")
-
-    summary_vars <- c("Age", "years", "sex")
-
-    group_vars <- c(
-      "Age", "years", "sex", "iteration",
-      rank_var
-    )
-  } else {
-    pop_used <- pop_df
-
-    join_vars <- c("GEOID", "sex", "years")
-
-    summary_vars <- c(
-      "Age", "years", "sex",
-      "sex_years", "sex_years_lab"
-    )
-
-    group_vars <- c(
-      "Age", "years", "sex",
-      "sex_years", "sex_years_lab",
-      "iteration", rank_var
-    )
-  }
+  summary_vars <- c(
+    "Age", "years", "sex",
+    "sex_years", "sex_years_lab"
+  )
 
   # SII/RII
   income_ineq <- le_df %>%
-    {
-      if (is_change) filter(., years == "2017-2019") else .
-    } %>%
     group_by(across(c(all_of(summary_vars), "iteration"))) %>%
     group_modify(~ {
-      y <- .x[[outcome]]
+      y <- .x[["le"]]
 
       model_sii <- lm(
         reformulate(rank_var, response = "y"),
@@ -115,13 +81,8 @@ income_disparities <- function(
         fmt(lci_rii), ", ",
         fmt(uci_rii), ")"
       )
-    )
-
-  if (is_change) {
-    out <- out %>% arrange(Age, Sex)
-  } else {
-    out <- out %>% arrange(Age, Sex, Years)
-  }
+    ) %>% 
+    arrange(Age, Sex, Years)
 
   out
 }

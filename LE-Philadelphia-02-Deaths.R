@@ -27,8 +27,8 @@ N_tracts <- length(phila_tracts)
 # Age limit for age at death
 age_limit <- 85
 
-# Today's date, formatted for file saving
-date <- format(Sys.Date(), "%Y%m%d")
+# Today's date for file saving/loading
+date <- "20260716"
 
 # Load helper functions
 source(here("Helpers", "print_message.R"))

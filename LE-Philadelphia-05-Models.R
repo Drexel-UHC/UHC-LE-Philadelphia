@@ -20,20 +20,20 @@ working_results <- here(results, "Working Results")
 dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/Data")
 path_onedrive <- here("Data - Cleansed")
 
+# Date for file saving/loading
+date <- "20260716"
+
 # Load data created in 01-Crosswalks
 load(file = here(path_onedrive, "phila_sf.Rdata"))
 load(file = here(path_onedrive, "sex_years.Rdata"))
 load(file = here(path_onedrive, "tract_ids.RData"))
 
 # Load data created in 04-Mortality-Rates
-load(file = here(dir_name, "Philly LE", "phila_death_rates_20260710.Rdata"))
+load(file = here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
 
 # Age groups for model
 age_limit <- 85
 ages <- seq(from = 0, to = age_limit, by = 1)
-
-# Today's date, formatted for file saving
-date <- format(Sys.Date(), "%Y%m%d")
 
 # Load helper functions
 source(here("Helpers", "nimble_helpers.R"))
@@ -96,7 +96,7 @@ nimble_results_no_pop_adjust <- run_nimble_parallel(
 # Lambdas ----------------------------------------------------------------
 
 
-load(file = here(path_onedrive, "nimble_results_20260708.Rdata"))
+load(file = here(path_onedrive, paste0("nimble_results_", date, ".Rdata")))
 lambdas <- extract_param(
   nimble_results = nimble_results,
   param          = "lambda",
@@ -107,7 +107,7 @@ lambdas <- extract_param(
   obj_name       = "lambdas"
 )
 
-load(file = here(path_onedrive, "nimble_results_no_pop_adjust_20260706.Rdata"))
+load(file = here(path_onedrive, paste0("nimble_results_no_pop_adjust_", date, ".Rdata")))
 lambdas_no_pop_adjust <- extract_param(
   nimble_results = nimble_results_no_pop_adjust,
   param          = "lambda",
@@ -141,8 +141,8 @@ save(
 
 
 # Load nimble results and lambdas
-load(file = here(path_onedrive, "nimble_results_20260708.Rdata"))
-load(here(path_onedrive, "lambdas_20260708.Rdata"))
+load(file = here(path_onedrive, paste0("nimble_results_", date, ".Rdata")))
+load(file = here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
 
 # Extract intercepts (beta0s)
 beta0 <- extract_param(
@@ -298,7 +298,7 @@ lambda_ess <- compute_ess(lambdas)
 # Life Expectancy ---------------------------------------------------------
 
 
-load(here(path_onedrive, "lambdas_20260708.Rdata"))
+load(file = here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
 le_nimble <- run_lt_parallel(
   lambdas,
   label = "Main",
@@ -307,11 +307,11 @@ le_nimble <- run_lt_parallel(
 )
 # Main lifetable calculations took 5.63 hours to run.
 
-load(here(path_onedrive, "lambdas_no_pop_adjust_20260707.Rdata"))
+load(file = here(path_onedrive, paste0("lambdas_no_pop_adjust_", date, ".Rdata")))
 le_nimble_no_pop_adjust <- run_lt_parallel(
   lambdas_no_pop_adjust,
   label = "No pop adjust",
-  save_path = here(path_onedrive, "le_nimble_no_pop_adjust_20260707.Rdata"),
+  save_path = here(path_onedrive, paste0("le_nimble_no_pop_adjust_", date, ".Rdata")),
   obj_name = "le_nimble_no_pop_adjust"
 )
 # No pop adjust lifetable calculations took 5.38 hours to run.

@@ -66,16 +66,12 @@ make_traceplots <- function(
 
 compute_ess <- function(data) {
   iter_cols <- grep("^iter_", names(data), value = TRUE)
+  mat <- as.matrix(data[iter_cols])
 
+  ess <- apply(m, 1, function(x) effectiveSize(mcmc(x)))
+ 
   data %>%
-    rowwise() %>%
-    mutate(
-      ess = effectiveSize(
-        mcmc(
-          c_across(all_of(iter_cols))
-        )
-      )
-    ) %>%
-    ungroup() %>%
-    select(-iter_cols)
+    mutate(ess = ess) %>%
+    select(-all_of(iter_cols))
+   
 }

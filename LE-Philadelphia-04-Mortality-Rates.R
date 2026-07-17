@@ -17,13 +17,12 @@ dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/
 load(file = here(path_onedrive, "sex_years.Rdata"))
 load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
 
-# Load data data created in 02-Deaths and 03-Population
-load(file = here(path_onedrive, "phila_pop_20260708.Rdata"))
-load(here(dir_name, "Philly LE", "phila_death_counts_20260710.Rdata"))
-gc()
+# Date for file saving/loading
+date <- "20260716"
 
-# Today's date, formatted for file saving
-date <- format(Sys.Date(), "%Y%m%d")
+# Load data data created in 02-Deaths and 03-Population
+load(file = here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+load(here(dir_name, "Philly LE", paste0("phila_death_counts_", date, ".Rdata")))
 
 # Load helper functions
 source(here("Helpers", "compute_smooth_rates.R"))

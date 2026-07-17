@@ -17,6 +17,10 @@ library(reldist)
 library(Hmisc)
 library(dineq)
 library(broom)
+library(data.table)
+library(future)
+library(furrr)
+library(DemoTools)
 
 # Create variable to house directory paths
 results <- here("Results")
@@ -39,16 +43,15 @@ load(file = here(path_onedrive, "phila_tracts_ages_sexes_years.Rdata"))
 phila_tracts <- unique(phila_sf$GEOID)
 phila_tracts_2020 <- unique(phila_sf_2020$GEOID)
 
-# Today's date, formatted for file saving
-date <- format(Sys.Date(), "%Y%m%d")
+# Date for file saving/loading
+date <- "20260716"
 
 # Load helper functions
 source(here("Helpers", "compute_le_change.R"))
-source(here("Helpers", "build_le_mhi.R"))
 source(here("Helpers", "total_disparities.R"))
 source(here("Helpers", "income_disparities.R"))
-source(here("Helpers", "income_groups.R"))
-source(here("Helpers", "compute_lt.R"))
+source(here("Helpers", "mhi_helpers.R"))
+source(here("Helpers", "lt_helpers.R"))
 
 
 # Other Helpers -----------------------------------------------------------
@@ -65,18 +68,6 @@ set_lowpop_na <- function(df, cols) {
   df %>%
     mutate(across(all_of(cols), ~ if_else(GEOID %in% low_pop, NA_real_, .)))
 }
-#
-# summarise_ci <- function(df, value) {
-#   value <- rlang::ensym(value)
-#
-#   df %>%
-#     summarise(
-#       lci = quantile(!!value, 0.025, na.rm = TRUE),
-#       med = quantile(!!value, 0.5, na.rm = TRUE),
-#       uci = quantile(!!value, 0.975, na.rm = TRUE),
-#       .groups = "drop"
-#     )
-# }
 
 plot_theme <- function(base_size = 15) {
   theme_bw() +
@@ -95,7 +86,7 @@ plot_theme <- function(base_size = 15) {
 
 
 # Load LE data calculated in 05-Models
-load_gc(here(path_onedrive, "le_df_20260708.Rdata"))
+load_gc(here(path_onedrive, paste0("le_df_", date, ".Rdata")))
 
 # Dataframe life expectancy at birth by census tract x sex x years (with spatial structure for maps)
 le_birth <- filter(le_df, Age == 0) %>%
@@ -116,7 +107,7 @@ save(le_birth,
 
 
 # Load LE at birth data created above
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
@@ -167,6 +158,9 @@ le_decrease <- le_birth %>%
 # Load 2020-2010 GEOID Crosswalk created in 01-Crosswalks
 load_gc(here(path_onedrive, "geoid_crosswalk.Rdata"))
 
+# Load population data created in 03-Population
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+
 # Pull MHI from ACS
 mhi_raw <- map_dfr(c(2019, 2022), ~ {
   get_acs(
@@ -195,10 +189,12 @@ mhi_2022 <- mhi_raw %>%
 # Convert 2022 MHI to 2010 boundaries
 mhi_2022_to_2010 <- mhi_2022 %>%
   inner_join(geoid_crosswalk, by = c("GEOID" = "GEOID20")) %>%
-  mutate(mhi_weighted = mhi * WEIGHT) %>%
+  # mutate(mhi_weighted = mhi * WEIGHT) %>%
+  # mutate(mhi_weighted = weighted.mean(mhi, WEIGHT, na.rm = TRUE)) %>%
   group_by(GEOID10) %>%
   summarise(
-    mhi = sum(mhi_weighted, na.rm = TRUE) / sum(WEIGHT, na.rm = TRUE),
+    # mhi = sum(mhi_weighted, na.rm = TRUE) / sum(WEIGHT, na.rm = TRUE),
+    mhi = weighted.mean(mhi, WEIGHT, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   rename(GEOID = GEOID10) %>%
@@ -254,7 +250,15 @@ adjust_mhi <- function(df) {
     )
 }
 
-mhi_inflation <- adjust_mhi(mhi)
+mhi_inflation <- rbind(
+  mhi %>%
+    filter(years == "2017-2019") %>%
+    adjust_mhi(),
+  mhi %>%
+    filter(years == "2017-2019") %>%
+    adjust_mhi() %>%
+    mutate(years = "2020-2022")
+)
 mhi_sensitivity_inflation <- adjust_mhi(mhi_sensitivity)
 
 save(
@@ -269,7 +273,8 @@ save(
 
 # Split MHI into deciles
 mhi_deciles <- add_income_groups(
-  df = mhi_inflation,
+  mhi_df = mhi_inflation,
+  pop_df = phila_pop$pop_total_all_fixes,
   type = "decile"
 )
 
@@ -279,7 +284,8 @@ save(
 )
 
 mhi_deciles_sensitivity <- add_income_groups(
-  df = mhi_sensitivity_inflation,
+  mhi_df = mhi_sensitivity_inflation,
+  pop_df = phila_pop$pop_total_all_fixes,
   type = "decile"
 )
 
@@ -290,7 +296,8 @@ save(
 
 # Split MHI into ventiles
 mhi_ventiles <- add_income_groups(
-  df = mhi_inflation,
+  mhi_df = mhi_inflation,
+  pop_df = phila_pop$pop_total_all_fixes,
   type = "ventile"
 )
 
@@ -304,24 +311,23 @@ save(
 
 
 # Load LE data calculated in 05-Models
-load_gc(here(path_onedrive, "le_iter_df_20260708.Rdata"))
+load_gc(here(path_onedrive, paste0("le_iter_df_", date, ".Rdata")))
 
 # Load LE data calculated in 06-Analysis
-load_gc(here(path_onedrive, "mhi_deciles_20260710.Rdata"))
-load_gc(here(path_onedrive, "mhi_deciles_sensitivity_20260710.Rdata"))
-
-load_gc(here(path_onedrive, "mhi_ventiles_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("mhi_deciles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("mhi_deciles_sensitivity_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("mhi_ventiles_", date, ".Rdata")))
 
 le_iter_change <- compute_le_change(
-  df = le_iter_df,
+  le_df = le_iter_df,
   value = "le",
   iteration = TRUE
 )
 
 # Deciles
 le_iter_deciles <- build_le_mhi(
-  df = le_iter_df,
-  income_df = mhi_deciles,
+  le_df = le_iter_df,
+  mhi_df = mhi_deciles,
   value_col = "le",
   is_change = FALSE
 )
@@ -332,8 +338,8 @@ save(
 )
 
 le_iter_deciles_mhi_sensitivity <- build_le_mhi(
-  df = le_iter_df,
-  income_df = mhi_deciles_sensitivity,
+  le_df = le_iter_df,
+  mhi_df = mhi_deciles_sensitivity,
   value_col = "le",
   is_change = FALSE
 )
@@ -344,8 +350,8 @@ save(
 )
 
 le_iter_change_deciles <- build_le_mhi(
-  df = le_iter_change,
-  income_df = mhi_deciles,
+  le_df = le_iter_change,
+  mhi_df = mhi_deciles,
   value_col = "change",
   is_change = TRUE
 )
@@ -356,8 +362,8 @@ save(
 )
 
 le_iter_change_deciles_mhi_sensitivity <- build_le_mhi(
-  df = le_iter_change,
-  income_df = mhi_deciles_sensitivity,
+  le_df = le_iter_change,
+  mhi_df = mhi_deciles_sensitivity,
   value_col = "change",
   is_change = TRUE
 )
@@ -369,8 +375,8 @@ save(
 
 # Ventiles
 le_iter_ventiles <- build_le_mhi(
-  df = le_iter_df,
-  income_df = mhi_ventiles,
+  le_df = le_iter_df,
+  mhi_df = mhi_ventiles,
   value_col = "le",
   is_change = FALSE
 )
@@ -381,8 +387,8 @@ save(
 )
 
 le_iter_change_ventiles <- build_le_mhi(
-  df = le_iter_change,
-  income_df = mhi_ventiles,
+  le_df = le_iter_change,
+  mhi_df = mhi_ventiles,
   value_col = "change",
   is_change = TRUE
 )
@@ -397,8 +403,8 @@ save(
 
 
 # Load mortality rate data created in 03-Mortality-Rates and 05-Models
-load_gc(here(dir_name, "Philly LE", "phila_death_rates_20260710.Rdata"))
-load_gc(here(path_onedrive, "thetas_med_ci_20260706.Rdata"))
+load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("thetas_med_ci_", date, ".Rdata")))
 
 # Plot estimated rates with credible intervals
 rates_plot_ribbon <- thetas_med_ci %>%
@@ -442,7 +448,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
     p
   })
 
-pdf(file = here(working_results, "rates_plot_ribbon_20260706.pdf"))
+pdf(file = here(working_results, paste0("rates_plot_ribbon_", date, ".pdf")))
 rates_plot_ribbon
 dev.off()
 
@@ -451,9 +457,9 @@ dev.off()
 
 
 # Load data
-load_gc(here(path_onedrive, "le_iter_deciles_20260710.Rdata"))
-load_gc(here(path_onedrive, "phila_pop_20260708.Rdata"))
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("le_iter_deciles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Median LE (with P10–P90)
 table2_med_le <- le_birth %>%
@@ -477,8 +483,8 @@ table2_med_le <- le_birth %>%
 
 # Total disparities
 table2_total <- total_disparities(
-  le_iter_deciles,
-  phila_pop$pop_tract_sex_total_all_fixes
+  le_df = le_iter_deciles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes
 ) %>%
   filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
@@ -496,9 +502,8 @@ table2_total <- total_disparities(
 
 # Income disparities
 table2_income <- income_disparities(
-  le_iter_deciles,
-  phila_pop$pop_tract_sex_total_all_fixes,
-  outcome = "le"
+  le_df = le_iter_deciles,
+  deciles = TRUE
 ) %>%
   filter(Age == 0) %>%
   mutate(
@@ -531,8 +536,8 @@ write.csv(
 # Figure 1 - LE w/ Credible Intervals -------------------------------------
 
 
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
-load_gc(here(path_onedrive, "le_iter_change_deciles_20260710.Rdata"))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
 # Ordering for points on plots
 t1_order <- le_birth %>%
@@ -619,7 +624,7 @@ ggsave(
 
 
 # Load data created above
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Convert to le_birth dataframe to sf object
 le_sf <- le_birth %>%
@@ -690,8 +695,8 @@ tmap_save(
 # Figure 3 - Maps of Change in LE/Posterior Probability -------------------
 
 
-load_gc(here(path_onedrive, paste0("le_birth_change_20260710.Rdata")))
-load_gc(here(path_onedrive, "le_iter_change_deciles_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("le_birth_change_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
 # Convert le_birth_change dataframe to sf object
 le_change_sf <- le_birth_change %>%
@@ -832,12 +837,12 @@ tmap_save(
 
 
 # Load data
-load_gc(here(path_onedrive, "phila_pop_20260708.rdata"))
-load_gc(here(path_onedrive, "le_iter_deciles_20260710.Rdata"))
-load_gc(here(path_onedrive, "le_iter_change_deciles_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_deciles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
 le_by_decile <- compute_income_summary(
-  df = le_iter_deciles,
+  le_df = le_iter_deciles,
   value = le,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "decile"
@@ -849,7 +854,7 @@ save(
 )
 
 le_change_by_decile <- compute_income_summary(
-  df = le_iter_change_deciles,
+  le_df = le_iter_change_deciles,
   value = change,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "decile"
@@ -929,8 +934,8 @@ ggsave(
 # Appendix S2 - Population adjustment sensitivity analysis ---------------------
 
 
-load_gc(here(path_onedrive, "le_df_no_pop_adjust_20260708.Rdata"))
-load_gc(here(path_onedrive, "le_df_20260708.Rdata"))
+load_gc(here(path_onedrive, paste0("le_df_no_pop_adjust_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_df_", date, ".Rdata")))
 
 le_df_comp <- le_df %>%
   inner_join(le_df_no_pop_adjust, by = c("GEOID", "Age", "sex", "years")) %>%
@@ -968,7 +973,7 @@ ggsave(
 
 
 # Load data
-load_gc(here(path_onedrive, "phila_pop_20260708.Rdata"))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 # Max population
 max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE)
@@ -1018,37 +1023,14 @@ ggsave(
 # Appendix S5 - Abridged Lifetables -----------------------------------------------------
 
 
-load_gc(here(path_onedrive, "lambdas_20260708.Rdata"))
-load_gc(here(dir_name, "Philly LE", "phila_death_rates_20260710.Rdata"))
-load(here(path_onedrive, "phila_pop_20260708.rdata"))
+load_gc(here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
+load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
+load(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 load_gc(here(path_onedrive, "age_grp.Rdata"))
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 n <- phila_death_rates$death_rates_age_tract %>%
   select(tract, GEOID, sex, years, age, pop)
-
-lambdas_abridged <- n %>%
-  inner_join(age_grp) %>%
-  inner_join(lambdas) %>%
-  filter(!(GEOID %in% low_pop)) %>%
-  group_by(
-    tract, GEOID, sex, years,
-    sex_years, sex_years_lab, age_grp
-  ) %>%
-  summarise(
-    across(
-      starts_with("iter_"),
-      ~ {
-        if (sum(pop) > 0) {
-          weighted.mean(.x, pop)
-        } else {
-          mean(.x)
-        }
-      }
-    ),
-    pop = sum(pop),
-    .groups = "drop"
-  )
 
 iter_cols <- grep("^iter_", names(lambdas), value = TRUE)
 
@@ -1140,8 +1122,8 @@ ggsave(
 
 
 # Load mortality data created in 02-Deaths
-load_gc(here(dir_name, "Philly LE", "phila_deaths_20260710.Rdata"))
-load_gc(here(dir_name, "Philly LE", "phila_death_counts_20260710.Rdata"))
+load_gc(here(dir_name, "Philly LE", paste0("phila_deaths_", date, ".Rdata")))
+load_gc(here(dir_name, "Philly LE", paste0("phila_death_counts_", date, ".Rdata")))
 
 # Summary table for age at death in Philadelphia for Appendix S4
 phila_age_at_death_summary <- phila_deaths_nolow %>%
@@ -1297,12 +1279,12 @@ phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
   arrange(Measure)
 
 # Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
-load_gc(here(path_onedrive, "phila_pop_20260708.Rdata"))
-load_gc(here(path_onedrive, "mhi_sensitivity_inflation_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")))
 
 # Get average and sd of mhi for Philadelphia
 weighted_mhi_phila <- mhi_sensitivity_inflation %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  inner_join(phila_pop$pop_total_all_fixes) %>%
   group_by(years) %>%
   summarise(
     mean = round(mean(mhi, na.rm = TRUE), 2),
@@ -1341,30 +1323,28 @@ write.csv(
 )
 
 
-# Appendix S7 - Table 1 with Ventiles ------------------------------------
+# Appendix S7 - Table 2 with Ventiles ------------------------------------
 
 
-load_gc(here("Quarto", "Data", "le_birth_20260710.Rdata"))
-load_gc(here(path_onedrive, "le_iter_ventiles_20260710.Rdata"))
-load_gc(here(path_onedrive, "phila_pop_20260708.rdata"))
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_ventiles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
 
 # Total disparities
 total_disp_ventiles <- total_disparities(
-  le_iter_ventiles,
-  phila_pop$pop_tract_sex_total_all_fixes,
+  le_df = le_iter_ventiles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   deciles = FALSE
 )
 
 # Income-based disparities
 income_disp_vent <- income_disparities(
-  le_iter_ventiles,
-  phila_pop$pop_tract_sex_total_all_fixes,
-  outcome = "le",
+  le_df = le_iter_ventiles,
   deciles = FALSE
 )
 
 # Median LE (with P05–P95)
-table1_med_le_vent <- le_birth %>%
+table2_med_le_vent <- le_birth %>%
   group_by(sex, years) %>%
   summarise(
     le_med = median(med, na.rm = TRUE),
@@ -1384,7 +1364,7 @@ table1_med_le_vent <- le_birth %>%
   )
 
 # Total disparities
-table1_total_disp_vent <- total_disp_ventiles %>%
+table2_total_disp_vent <- total_disp_ventiles %>%
   filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
   mutate(Type = "Total") %>%
@@ -1398,7 +1378,7 @@ table1_total_disp_vent <- total_disp_ventiles %>%
   )
 
 # Income disparities
-table1_income_disp_vent <- income_disp_vent %>%
+table2_income_disp_vent <- income_disp_vent %>%
   filter(Age == 0) %>%
   mutate(Type = "Income-Based") %>%
   pivot_longer(
@@ -1412,14 +1392,14 @@ table1_income_disp_vent <- income_disp_vent %>%
   select(-Age)
 
 # Combine tables
-table1_vent <- bind_rows(
-  table1_med_le_vent,
-  table1_total_disp_vent,
-  table1_income_disp_vent
+table2_vent <- bind_rows(
+  table2_med_le_vent,
+  table2_total_disp_vent,
+  table2_income_disp_vent
 )
 
 write.csv(
-  table1_vent,
+  table2_vent,
   here(appendix, "S7.csv"),
   row.names = FALSE
 )
@@ -1429,7 +1409,7 @@ write.csv(
 
 
 # Load Data
-load_gc(here(path_onedrive, "mhi_sensitivity_inflation_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")))
 
 # Convert dataframe to sf object
 mhi_sf <- mhi_sensitivity_inflation %>%
@@ -1502,8 +1482,8 @@ tmap_save(
 
 
 # Load data
-load_gc(here(path_onedrive, "le_iter_deciles_20260710.Rdata"))
-load_gc(here(path_onedrive, "phila_pop_20260708.rdata"))
+load_gc(here(path_onedrive, paste0("le_iter_deciles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
 
 le_by_geoid_decile <- le_iter_deciles %>%
   filter(!is.na(le)) %>%
@@ -1511,7 +1491,7 @@ le_by_geoid_decile <- le_iter_deciles %>%
   filter(!is.na(le), !is.na(pop), pop > 0) %>%
   group_by(Age, years, sex, GEOID, decile_income) %>%
   summarise(
-    wtdle = weighted.mean(le, weights = pop),
+    wtdle = weighted.mean(le, w = pop),
     .groups = "drop"
   )
 
@@ -1549,18 +1529,18 @@ ggsave(
 
 
 # Load time-varying MHI data
-load_gc(here(path_onedrive, "le_iter_deciles_mhi_sensitivity_20260710.Rdata"))
-load_gc(here(path_onedrive, "le_iter_change_deciles_mhi_sensitivity_20260710.Rdata"))
+load_gc(here(path_onedrive, paste0("le_iter_deciles_mhi_sensitivity_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_change_deciles_mhi_sensitivity_", date, ".Rdata")))
 
 le_by_decile_mhi_sensitivity <- compute_income_summary(
-  df = le_iter_deciles_mhi_sensitivity,
+  le_df = le_iter_deciles_mhi_sensitivity,
   value = le,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "decile"
 )
 
 le_change_by_decile_mhi_sensitivity <- compute_income_summary(
-  df = le_iter_change_deciles_mhi_sensitivity,
+  le_df = le_iter_change_deciles_mhi_sensitivity,
   value = change,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "decile"
@@ -1628,13 +1608,13 @@ ggsave(
 
 
 # Load data
-load_gc(here(dir_name, "Philly LE", "phila_death_rates_20260710.Rdata"))
-load_gc(here(path_onedrive, "phila_pop_20260708.rdata"))
-load_gc(here(path_onedrive, "le_iter_change_ventiles_20260710.Rdata"))
+load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_change_ventiles_", date, ".Rdata")))
 
 # LE by ventile
 le_by_ventile <- compute_income_summary(
-  df = le_iter_ventiles,
+  le_df = le_iter_ventiles,
   value = le,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "ventile"
@@ -1642,7 +1622,7 @@ le_by_ventile <- compute_income_summary(
 
 # Change in LE by ventile
 le_change_by_ventile <- compute_income_summary(
-  df = le_iter_change_ventiles,
+  le_df = le_iter_change_ventiles,
   value = change,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   type = "ventile"

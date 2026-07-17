@@ -46,11 +46,14 @@ library(here)
 # Interactive mode for maps
 tmap_mode("view")
 
+# Date for file saving/loading
+date <- "20260716"
+
 # Load data
-load(here("Quarto", "Data", "le_birth_20260710.Rdata"))
-load(here("Quarto", "Data", "le_change_sf_20260710.Rdata"))
-load(here("Quarto", "Data", "post_prob_sf_20260710.Rdata"))
-load(here("Quarto", "Data", "le_by_decile_20260710.Rdata"))
+load(here("Data", paste0("le_birth_",date,".Rdata")))
+load(here("Data", paste0("le_change_sf_",date,".Rdata")))
+load(here("Data", paste0("post_prob_sf_",date,".Rdata")))
+load(here("Data", paste0("le_by_decile_",date,".Rdata")))
 
 # Convert data to sf
 le_birth_sf <- st_as_sf(le_birth)

@@ -43,8 +43,8 @@ N_periods <- length(unique(phila_tracts_age_grp_sexes_years$years))
 # Number of sex groups in analysis
 N_sexes <- length(unique(phila_tracts_age_grp_sexes_years$sex))
 
-# Today's date, formatted for file saving
-date <- format(Sys.Date(), "%Y%m%d")
+# Date for file saving/loading
+date <- "20260716"
 
 # Load helper functions
 source(here("Helpers", "print_message.R"))
@@ -52,8 +52,6 @@ source(here("Helpers", "print_message.R"))
 
 # SEER Population --------------------------------------------------------------
 
-
-## 5 year age groups -------------------------------------------------------
 
 cat("\nReading SEER population data...\n")
 
@@ -297,7 +295,7 @@ phila_pop_age <- phila_pop_age_grp %>%
     )
   ) %>%
   complete(GEOID, sex, years, age, fill = list(pop = 0)) %>%
-  filter(!is.na(pop)) %>% # , !is.na(age_grp_5)
+  filter(!is.na(pop)) %>% #
   group_by(GEOID, sex, years, age) %>%
   summarise(
     pop = sum(pop),
@@ -356,7 +354,7 @@ phila_pop_age_all_fixes <- phila_pop_age_grp_all_fixes %>%
     )
   ) %>%
   complete(GEOID, sex, years, age, fill = list(pop = 0)) %>%
-  filter(!is.na(pop)) %>% # , !is.na(age_grp_5)
+  filter(!is.na(pop)) %>%
   group_by(GEOID, years, sex, age) %>%
   summarise(
     pop = sum(pop),
@@ -426,72 +424,3 @@ save(
   phila_pop,
   file = here(path_onedrive, paste0("phila_pop_", date, ".Rdata"))
 )
-
-
-# PCLM research -----------------------------------------------------------
-
-
-load(file = here(path_onedrive, paste0("phila_pop_20260708.Rdata")))
-
-phila_pop_age_all_fixes_new <- phila_pop$pop_age_all_fixes %>%
-  inner_join(age_grp) %>%
-  group_by(GEOID, years, sex, age_grp) %>%
-  summarise(
-    pop = sum(pop),
-    .groups = "drop"
-  )
-phila_pop_age_grp_all_fixes_new <- phila_pop$pop_age_grp_all_fixes
-
-load(file = here(path_onedrive, paste0("phila_pop_20260706.Rdata")))
-
-phila_pop_age_all_fixes_old <- phila_pop$pop_age_all_fixes %>%
-  inner_join(age_grp) %>%
-  group_by(GEOID, years, sex, age_grp) %>%
-  summarise(
-    pop = sum(pop),
-    .groups = "drop"
-  )
-phila_pop_age_grp_all_fixes_old <- phila_pop$pop_age_grp_all_fixes
-
-plot(x = phila_pop_age_all_fixes_old$pop, y = phila_pop_age_all_fixes_new$pop)
-abline(a = 0, b = 1, col = "red")
-
-phila_pop_graduate_compare <- phila_pop_age_all_fixes_old %>%
-  inner_join(phila_pop_age_all_fixes_new, by = c("GEOID", "years", "sex", "age_grp")) %>%
-  mutate(diff = pop.x - pop.y)
-sum(phila_pop_graduate_compare$diff)
-
-# Compare with age group pop file
-phila_pop_comp <- phila_pop_age_all_fixes_old %>%
-  inner_join(
-    phila_pop_age_grp_all_fixes_old %>%
-      select(GEOID, years, sex, age_grp, pop),
-    by = c("GEOID", "years", "sex", "age_grp")
-  ) %>%
-  # filter(!(GEOID %in% low_pop)) %>%
-  mutate(diff = pop.x - pop.y)
-sum(phila_pop_comp$diff)
-
-
-# Compare with age group pop file
-phila_pop_comp_new <- phila_pop_age_all_fixes_new %>%
-  inner_join(
-    phila_pop_age_grp_all_fixes_new %>%
-      select(GEOID, years, sex, age_grp, pop),
-    by = c("GEOID", "years", "sex", "age_grp")
-  ) %>%
-  # filter(!(GEOID %in% low_pop)) %>%
-  mutate(diff = pop.x - pop.y)
-sum(phila_pop_comp_new$diff)
-
-phila_pop_comp_42101004102 <- phila_pop_comp %>%
-  filter(
-    GEOID == "42101004102",
-    sex == "Men",
-    years == "2020-2022"
-  ) %>%
-  arrange(age_grp)
-sum(phila_pop_comp_42101004102$diff)
-
-plot(x = phila_pop_comp$pop, y = phila_pop_comp$pop_grad)
-abline(a = 0, b = 1, col = "red")
