@@ -69,9 +69,8 @@ compute_ess <- function(data) {
   mat <- as.matrix(data[iter_cols])
 
   ess <- apply(m, 1, function(x) effectiveSize(mcmc(x)))
- 
+
   data %>%
     mutate(ess = ess) %>%
     select(-all_of(iter_cols))
-   
 }

@@ -9,13 +9,13 @@ income_disparities <- function(
   le_df,
   deciles = TRUE
 ) {
-
   rank_var <- if (deciles) "decile_income1" else "ventile_income1"
   prefix <- if (deciles) "decile_" else "ventile_"
 
   # Filter away NA le
   le_df <- le_df %>%
-    filter(!is.na(.data[["le"]]))
+    filter(!is.na(le))
+  # filter(!is.na(.data[["le"]]))
 
   summary_vars <- c(
     "Age", "years", "sex",
@@ -26,7 +26,8 @@ income_disparities <- function(
   income_ineq <- le_df %>%
     group_by(across(c(all_of(summary_vars), "iteration"))) %>%
     group_modify(~ {
-      y <- .x[["le"]]
+      # y <- .x[["le"]]
+      y <- .x$le
 
       model_sii <- lm(
         reformulate(rank_var, response = "y"),
@@ -81,7 +82,7 @@ income_disparities <- function(
         fmt(lci_rii), ", ",
         fmt(uci_rii), ")"
       )
-    ) %>% 
+    ) %>%
     arrange(Age, Sex, Years)
 
   out

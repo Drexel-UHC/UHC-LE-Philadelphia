@@ -21,24 +21,11 @@ add_income_groups <- function(
     rename(total_pop = pop) %>%
     filter(total_pop > 0, !is.na(mhi)) %>%
     group_by(years) %>%
-    # mutate(
-    #   !!name := as.numeric(cut(
-    #     mhi,
-    #     breaks = reldist::wtd.quantile(
-    #       mhi,
-    #       q = seq(0, 1, length.out = n_groups + 1),
-    #       weight = total_pop,
-    #       na.rm = TRUE
-    #     ),
-    #     include.lowest = TRUE
-    #   )),
-    #   !!paste0(name, "1") :=
-    #     (.data[[name]] - 1) / (n_groups - 1)
-    # ) %>%
     mutate(
       !!name := {
         b <- reldist::wtd.quantile(
-          mhi, q = seq(0, 1, length.out = n_groups + 1),
+          mhi,
+          q = seq(0, 1, length.out = n_groups + 1),
           weight = total_pop, na.rm = TRUE
         )
         b[1] <- -Inf
@@ -179,10 +166,10 @@ plot_income_curve <- function(
 #' @returns
 
 build_le_mhi <- function(
-    le_df,
-    mhi_df,
-    value_col,
-    is_change = FALSE
+  le_df,
+  mhi_df,
+  value_col,
+  is_change = FALSE
 ) {
   if (is_change) {
     le_df <- bind_rows(
@@ -190,10 +177,9 @@ build_le_mhi <- function(
       le_df %>% mutate(years = "2020-2022")
     )
   }
-  
+
   le_df %>%
     inner_join(mhi_df, by = c("GEOID", "years")) %>%
     inner_join(sex_years, by = c("sex", "years")) %>%
     set_lowpop_na(value_col)
 }
-

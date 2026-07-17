@@ -50,10 +50,10 @@ tmap_mode("view")
 date <- "20260716"
 
 # Load data
-load(here("Data", paste0("le_birth_",date,".Rdata")))
-load(here("Data", paste0("le_change_sf_",date,".Rdata")))
-load(here("Data", paste0("post_prob_sf_",date,".Rdata")))
-load(here("Data", paste0("le_by_decile_",date,".Rdata")))
+load(here("Data", paste0("le_birth_", date, ".Rdata")))
+load(here("Data", paste0("le_change_sf_", date, ".Rdata")))
+load(here("Data", paste0("post_prob_sf_", date, ".Rdata")))
+load(here("Data", paste0("le_by_decile_", date, ".Rdata")))
 
 # Convert data to sf
 le_birth_sf <- st_as_sf(le_birth)
