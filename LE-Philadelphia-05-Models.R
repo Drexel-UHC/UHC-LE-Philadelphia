@@ -231,7 +231,7 @@ dev.off()
 # Nonspatial random effects ESS
 nonspat_ess <- compute_ess(nonspat)
 
-# Extract spatial precision parameters
+# Extract spatial variance parameters
 tau <- extract_param(
   nimble_results,
   param = "tau",
@@ -239,7 +239,7 @@ tau <- extract_param(
   sex_years_df = sex_years
 )
 
-# Spatial precision traceplots
+# Spatial variance traceplots
 pdf(
   here(working_results, "tau_traceplots.pdf"),
   width = 10,
@@ -255,7 +255,7 @@ make_traceplots(
 
 dev.off()
 
-# Spatial precision ESS
+# Spatial variance ESS
 tau_ess <- compute_ess(tau)
 
 # Extract nonspatial precision parameters
@@ -266,7 +266,7 @@ tauns <- extract_param(
   sex_years_df = sex_years
 )
 
-# Nonspatial precision traceplots
+# Nonspatial variance traceplots
 pdf(
   here(working_results, "tauns_traceplots.pdf"),
   width = 10,
@@ -282,7 +282,7 @@ make_traceplots(
 
 dev.off()
 
-# Nonspatial precision ESS
+# Nonspatial variance ESS
 tauns_ess <- compute_ess(tauns)
 
 

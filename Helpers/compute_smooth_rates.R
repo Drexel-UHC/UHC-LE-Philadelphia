@@ -34,31 +34,44 @@ compute_smoothed_rates <- function(
     length()
   n_deaths_capped <- sum(death_rates_age_tract$deaths_capped, na.rm = TRUE)
   deaths_removed <- abs(sum(death_rates_age_tract$deaths, na.rm = TRUE) - sum(joined_df$deaths, na.rm = TRUE))
+  deaths_removed_2017 <- abs(sum(filter(death_rates_age_tract, years == "2017-2019")$deaths, na.rm = TRUE) - sum(filter(joined_df, years == "2017-2019")$deaths, na.rm = TRUE))
+  deaths_removed_2020 <- abs(sum(filter(death_rates_age_tract, years == "2020-2022")$deaths, na.rm = TRUE) - sum(filter(joined_df, years == "2020-2022")$deaths, na.rm = TRUE))
   low_pop_deaths <- sum((death_rates_age_tract %>% filter(GEOID %in% low_pop))$deaths)
   low_pop_pop <- sum((death_rates_age_tract %>% filter(GEOID %in% low_pop))$pop)
   total_deaths <- sum(death_rates_age_tract$deaths)
   total_pop <- sum(death_rates_age_tract$pop)
 
   # Print diagnostics
-  cat(sprintf(
-    paste0(
-      "unique GEOIDs: %s\n",
-      "GEOID x years x sex x age combinations where deaths were capped: %s\n",
-      "deaths removed because deaths > pop: %s (%s%% of total)\n",
-      "deaths in low pop tracts (should be 0): %s\n",
-      "pop in low pop tracts (should be 0): %s\n",
-      "total deaths: %s\n",
-      "total pop: %s\n"
-    ),
-    format(n_geo, big.mark = ","),
-    format(n_deaths_capped, big.mark = ","),
-    format(deaths_removed, big.mark = ","),
-    format(round(deaths_removed / (total_deaths + deaths_removed) * 100, 1), big.mark = ","),
-    format(low_pop_deaths, big.mark = ","),
-    format(low_pop_pop, big.mark = ","),
-    format(total_deaths, big.mark = ","),
-    format(total_pop, big.mark = ",")
-  ))
+  print_message(
+    "unique GEOIDs" = n_geo,
+    "GEOID x years x sex x age combinations where deaths were capped" = n_deaths_capped,
+    "deaths removed because deaths > pop" = paste0(deaths_removed, " (", round(deaths_removed / (total_deaths + deaths_removed) * 100, 1), "% of total)"),
+    "deaths removed because deaths > pop (2017-2019)" = deaths_removed_2017,
+    "deaths removed because deaths > pop (2020-2022)" = deaths_removed_2020,
+    "deaths in low pop tracts (should be 0)" = low_pop_deaths,
+    "pop in low pop tracts (should be 0)" = low_pop_pop,
+    "total deaths" = total_deaths,
+    "total pop" = total_pop
+  )
+  # cat(sprintf(
+  #   paste0(
+  #     "unique GEOIDs: %s\n",
+  #     "GEOID x years x sex x age combinations where deaths were capped: %s\n",
+  #     "deaths removed because deaths > pop: %s (%s%% of total)\n",
+  #     "deaths in low pop tracts (should be 0): %s\n",
+  #     "pop in low pop tracts (should be 0): %s\n",
+  #     "total deaths: %s\n",
+  #     "total pop: %s\n"
+  #   ),
+  #   format(n_geo, big.mark = ","),
+  #   format(n_deaths_capped, big.mark = ","),
+  #   format(deaths_removed, big.mark = ","),
+  #   format(round(deaths_removed / (total_deaths + deaths_removed) * 100, 1), big.mark = ","),
+  #   format(low_pop_deaths, big.mark = ","),
+  #   format(low_pop_pop, big.mark = ","),
+  #   format(total_deaths, big.mark = ","),
+  #   format(total_pop, big.mark = ",")
+  # ))
 
   # Summarize across GEOIDs
   death_rates_age <- death_rates_age_tract %>%

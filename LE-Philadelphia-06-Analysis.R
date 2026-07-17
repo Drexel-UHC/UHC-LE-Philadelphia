@@ -113,11 +113,12 @@ load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(
-    le_med = round(median(med, na.rm = TRUE), 2),
-    le_P10 = round(quantile(med, 0.1, na.rm = T), 2),
-    le_P90 = round(quantile(med, 0.9, na.rm = T), 2),
+    le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
+    le_P10 = round(reldist::wtd.quantile(med, q = 0.1, weight = pop, na.rm = TRUE), 2),
+    le_P90 = round(reldist::wtd.quantile(med, q = 0.9, weight = pop, na.rm = TRUE), 2),
     .groups = "drop"
   )
 
@@ -128,12 +129,13 @@ le_change_summary <- le_birth %>%
     value = "le",
     iteration = FALSE
   ) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes %>% filter(years == "2017-2019")) %>%
   group_by(sex) %>%
   summarise(
     change_min = round(min(change, na.rm = TRUE), 2),
-    change_med = round(median(change, na.rm = TRUE), 2),
-    change_P10 = round(quantile(change, 0.1, na.rm = TRUE), 2),
-    change_P90 = round(quantile(change, 0.9, na.rm = TRUE), 2),
+    change_med = round(reldist::wtd.quantile(change, q = 0.5, weight = pop, na.rm = TRUE), 2),
+    change_P10 = round(reldist::wtd.quantile(change, q = 0.1, weight = pop, na.rm = TRUE), 2),
+    change_P90 = round(reldist::wtd.quantile(change, q = 0.9, weight = pop, na.rm = TRUE), 2),
     change_max = round(max(change, na.rm = TRUE), 2),
     .groups = "drop"
   )
@@ -145,10 +147,11 @@ le_decrease <- le_birth %>%
     value = "le",
     iteration = FALSE
   ) %>%
-  mutate(decr = change < 0) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes %>% filter(years == "2017-2019")) %>%
+  mutate(decr = as.numeric(change < 0)) %>%
   group_by(sex) %>%
   summarise(
-    pct_decr = mean(decr, na.rm = TRUE),
+    pct_decr = weighted_mean(decr, w = pop, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(pct_decr = round(pct_decr * 100, 2))
@@ -488,11 +491,12 @@ load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Median LE (with P10–P90)
 table2_med_le <- le_birth %>%
-  group_by(sex, years) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(
-    le_med = median(med, na.rm = TRUE),
-    le_P10 = quantile(med, 0.10, na.rm = TRUE),
-    le_P90 = quantile(med, 0.90, na.rm = TRUE),
+    le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
+    le_P10 = round(reldist::wtd.quantile(med, q = 0.1, weight = pop, na.rm = TRUE), 2),
+    le_P90 = round(reldist::wtd.quantile(med, q = 0.9, weight = pop, na.rm = TRUE), 2),
     .groups = "drop"
   ) %>%
   mutate(
@@ -565,13 +569,14 @@ load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
 # Ordering for points on plots
 t1_order <- le_birth %>%
-  filter(years == "2017-2019") %>%
+  filter(years == "2017-2019", !is.na(med)) %>%
   group_by(sex) %>%
   mutate(order = rank(med)) %>%
   select(GEOID, sex, order)
 
 # LE
 le_plot <- le_birth %>%
+  filter(!is.na(med)) %>%
   left_join(t1_order, by = c("GEOID", "sex")) %>%
   ggplot(
     aes(
@@ -623,6 +628,7 @@ save(
 
 # Change in LE
 change_plot <- le_birth_change %>%
+  filter(!is.na(med)) %>%
   ggplot(
     aes(
       x = med,
@@ -768,6 +774,7 @@ le_change_maps_list <- list()
 
 # Posterior probability of decrease in LE
 post_prob_sf <- le_iter_change_deciles %>%
+  filter(years == "2017-2019") %>%
   mutate(decr = change < 0) %>%
   group_by(GEOID, sex) %>%
   summarise(
@@ -777,13 +784,7 @@ post_prob_sf <- le_iter_change_deciles %>%
   mutate(prob_decr = round(prob_decr * 100, 2)) %>%
   full_join(phila_sf) %>%
   select(GEOID, sex, prob_decr, geometry) %>%
-  ungroup() %>%
-  mutate(
-    prob_decr = case_when(
-      GEOID %in% low_pop ~ NA_real_,
-      TRUE ~ prob_decr
-    )
-  ) %>%
+  set_lowpop_na("prob_decr") %>%
   st_as_sf()
 
 save(
@@ -837,9 +838,6 @@ for (i in unique(le_change_sf$sex)) {
   # Posterior probability data
   post_prob_i <- post_prob_sf %>% filter(sex == i)
 
-  # Breaks for legend
-  breaks_post_prob <- c(0, 5, 10, 25, 75, 90, 95, 100)
-
   # Posterior probability map
   post_prob_maps_list[[i]] <- tm_shape(post_prob_i) +
     tm_borders(lwd = 0.5) +
@@ -891,7 +889,7 @@ tmap_save(
 
 
 # Load data
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("le_iter_deciles_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
@@ -981,7 +979,361 @@ ggsave(
 )
 
 
-# Appendix S2 - Population adjustment sensitivity analysis ---------------------
+# Appendix S2 - Population Distribution ----------------------------------
+
+
+# Load data
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+
+# Max population
+max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE)/1000
+
+# Distribution of total tract population
+pop_tract_hist <- phila_pop$pop_tract_sex_total_all_fixes %>%
+  inner_join(sex_years) %>%
+  ggplot(aes(x = pop / 1000)) +
+  geom_histogram(
+    bins = 30,
+    colour = "black",
+    fill = "lightblue"
+  ) +
+  labs(
+    x = "Population (thousands)",
+    y = "Count"
+  ) +
+  facet_wrap(~sex_years_lab) +
+  scale_x_continuous(
+    breaks = seq(2, max_pop_total, by = 2)
+  ) +
+  plot_theme(20)
+
+ggsave(
+  filename = here(appendix, "S2a.png"),
+  plot = pop_tract_hist,
+  width = 10,
+  height = 10,
+  dpi = 600
+)
+
+# Distribution of single-age tract population
+pop_tract_age_hist <- phila_pop$pop_age_all_fixes %>%
+  inner_join(sex_years) %>%
+  ggplot(aes(x = pop)) +
+  geom_histogram(
+    bins = 30,
+    colour = "black",
+    fill = "lightblue"
+  ) +
+  labs(
+    x = "Population",
+    y = "Count"
+  ) +
+  facet_wrap(~sex_years_lab) +
+  scale_x_continuous(
+    limits = c(0, 300),
+    breaks = seq(0, 300, by = 50)
+  ) +
+  plot_theme(20)
+
+ggsave(
+  filename = here(appendix, "S2b.png"),
+  plot = pop_tract_age_hist,
+  width = 10,
+  height = 10,
+  dpi = 600
+)
+
+
+# Appendix S4 - Demographics of Vital Statistics and ACS Data -------------
+
+
+# Load mortality data created in 02-Deaths
+load_gc(here(dir_name, "Philly LE", paste0("phila_deaths_", date, ".Rdata")))
+load_gc(here(dir_name, "Philly LE", paste0("phila_death_counts_", date, ".Rdata")))
+
+# Summary table for age at death in Philadelphia for Appendix S4
+phila_age_at_death_summary <- phila_deaths_nolow %>%
+  group_by(years) %>%
+  summarise(
+    mean = sprintf("%.2f", mean(AGE_DEATH, na.rm = TRUE)),
+    sd = sprintf("%.2f", sd(AGE_DEATH, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  mutate(sex = "  Total") %>%
+  bind_rows(
+    phila_deaths_nolow %>%
+      group_by(years, sex) %>%
+      summarise(
+        mean = sprintf("%.2f", mean(AGE_DEATH, na.rm = TRUE)),
+        sd = sprintf("%.2f", sd(AGE_DEATH, na.rm = TRUE)),
+        .groups = "drop"
+      ) %>%
+      mutate(sex = paste0("    ", sex))
+  ) %>%
+  mutate(mean_sd = paste0(mean, " (", sd, ")")) %>%
+  pivot_wider(
+    names_from = years,
+    values_from = mean_sd,
+    values_fill = ""
+  ) %>%
+  select(-c(mean, sd)) %>%
+  group_by(sex) %>%
+  summarise(
+    "2017-2019" = paste(`2017-2019`, collapse = ""),
+    "2020-2022" = paste(`2020-2022`, collapse = ""),
+    .groups = "drop"
+  ) %>%
+  bind_rows(
+    c(sex = "Average age at death (SD)", "2017-2019" = "", "2020-2022" = ""),
+    c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")
+  ) %>%
+  rename("Measure" = sex) %>%
+  mutate(Measure = factor(Measure,
+                          levels = c(
+                            "Average age at death (SD)",
+                            "  Total",
+                            "  Sex",
+                            "    Men",
+                            "    Women",
+                            "    Unknown"
+                          )
+  )) %>%
+  arrange(Measure)
+
+# Summary table of deaths in Philly by year and sex
+phila_death_count_summary_sex <- phila_death_count_nolow_unknown %>%
+  group_by(years, sex) %>%
+  summarise(
+    deaths = sum(deaths),
+    .groups = "drop"
+  ) %>%
+  group_by(years) %>%
+  mutate(
+    total = sum(deaths),
+    pct = deaths / total * 100,
+    deaths_chr = format(deaths, big.mark = ",", scientific = FALSE),
+    sex = paste0("    ", sex)
+  ) %>%
+  bind_rows(
+    phila_death_count_nolow_unknown %>%
+      group_by(years) %>%
+      summarise(
+        deaths = sum(deaths),
+        total = sum(deaths),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        sex = "  Total",
+        pct = deaths / total * 100,
+        deaths_chr = format(deaths, big.mark = ",", scientific = FALSE)
+      )
+  ) %>%
+  mutate(
+    deaths_pct = paste0(
+      deaths_chr,
+      " (",
+      sprintf("%.2f", pct),
+      "%)"
+    )
+  ) %>%
+  pivot_wider(
+    names_from = years,
+    values_from = deaths_pct,
+    values_fill = ""
+  ) %>%
+  select(-c(deaths, pct)) %>%
+  group_by(sex) %>%
+  summarise(
+    "2017-2019" = paste(`2017-2019`, collapse = ""),
+    "2020-2022" = paste(`2020-2022`, collapse = ""),
+    .groups = "drop"
+  ) %>%
+  bind_rows(
+    c(sex = "Number of deaths (%)", "2017-2019" = "", "2020-2022" = ""),
+    c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")
+  ) %>%
+  rename("Measure" = sex) %>%
+  mutate(Measure = factor(Measure,
+                          levels = c(
+                            "Number of deaths (%)",
+                            "  Total",
+                            "  Sex",
+                            "    Men",
+                            "    Women",
+                            "    Unknown"
+                          )
+  )) %>%
+  arrange(Measure)
+
+# Summary table of race-ethnicity of Philly deaths for Table 1
+phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
+  filter(!is.na(age)) %>%
+  group_by(years, racehisp) %>%
+  summarise(
+    deaths = n(),
+    .groups = "drop"
+  ) %>%
+  group_by(years) %>%
+  mutate(
+    total = sum(deaths),
+    deaths_chr = format(deaths, big.mark = ",", scientific = FALSE),
+    pct = sprintf("%.2f", deaths / total * 100),
+    deaths_pct = paste0(deaths_chr, " (", pct, "%)"),
+    racehisp = paste0("    ", racehisp)
+  ) %>%
+  pivot_wider(
+    names_from = years,
+    values_from = deaths_pct,
+    values_fill = ""
+  ) %>%
+  select(-c(deaths, pct)) %>%
+  group_by(racehisp) %>%
+  summarise(
+    "2017-2019" = paste(`2017-2019`, collapse = ""),
+    "2020-2022" = paste(`2020-2022`, collapse = ""),
+    .groups = "drop"
+  ) %>%
+  rename("Measure" = racehisp) %>%
+  bind_rows(c(Measure = "  Racial-ethnic group", "2017-2019" = "", "2020-2022" = "")) %>%
+  mutate(Measure = factor(Measure,
+                          levels = c(
+                            "  Racial-ethnic group", "    Hispanic", "    Non-Hispanic American Indian, Alaska Native",
+                            "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
+                            "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"
+                          )
+  )) %>%
+  arrange(Measure)
+
+# Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")))
+
+# Get average and sd of mhi for Philadelphia
+weighted_mhi_phila <- mhi_sensitivity_inflation %>%
+  inner_join(phila_pop$pop_total_all_fixes) %>%
+  group_by(years) %>%
+  summarise(
+    mean = round(mean(mhi, na.rm = TRUE), 2),
+    wtd.mean = round(weighted_mean(mhi, w = pop, na.rm = T), 2),
+    sd = round(sd(mhi, na.rm = TRUE), 2),
+    wtd.sd = round(sqrt(weighted_var(mhi, w = pop, na.rm = T)), 2),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    wtd_mean_chr = format(wtd.mean, big.mark = ",", scientific = FALSE),
+    wtd_sd_chr = format(wtd.sd, big.mark = ",", scientific = FALSE),
+    wtd_mean_sd = paste0("$", wtd_mean_chr, " (", wtd_sd_chr, ")")
+  ) %>%
+  pivot_wider(
+    names_from = years,
+    values_from = wtd_mean_sd,
+    values_fill = ""
+  ) %>%
+  select(-c(mean, wtd.mean, sd, wtd.sd, wtd_mean_chr, wtd_sd_chr)) %>%
+  summarise_all(~ paste(., collapse = "")) %>%
+  mutate("Measure" = "Population-weighted MHI (SD)") %>%
+  relocate(Measure)
+
+# Appendix S6
+appendix_mort_summary <- bind_rows(
+  phila_age_at_death_summary,
+  phila_death_count_summary_sex,
+  phila_death_count_summary_racehisp,
+  weighted_mhi_phila
+)
+
+write.csv(
+  appendix_mort_summary,
+  file = here(appendix, "S4.csv"),
+  row.names = FALSE
+)
+
+
+# Appendix S5 - Table 2 with Ventiles ------------------------------------
+
+
+load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_ventiles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+
+# Total disparities
+total_disp_ventiles <- total_disparities(
+  le_df = le_iter_ventiles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
+  deciles = FALSE
+)
+
+# Income-based disparities
+income_disp_vent <- income_disparities(
+  le_df = le_iter_ventiles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
+  deciles = FALSE
+)
+
+# Median LE (with P05–P95)
+table2_med_le_vent <- le_birth %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  group_by(sex, years, sex_years, sex_years_lab) %>%
+  summarise(
+    le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
+    le_P05 = round(reldist::wtd.quantile(med, q = 0.05, weight = pop, na.rm = TRUE), 2),
+    le_P95 = round(reldist::wtd.quantile(med, q = 0.95, weight = pop, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    value = sprintf("%.2f [%.2f - %.2f]", le_med, le_P05, le_P95),
+    Type = "",
+    Measure = "Median LE [P05 - P95]"
+  ) %>%
+  select(Type, Measure, sex, years, value) %>%
+  pivot_wider(
+    names_from = c(sex, years),
+    values_from = value
+  )
+
+# Total disparities
+table2_total_disp_vent <- total_disp_ventiles %>%
+  filter(Age == 0) %>%
+  select(Years, Sex, AbsDif, RelDif) %>%
+  mutate(Type = "Total") %>%
+  pivot_longer(
+    cols = c(AbsDif, RelDif),
+    names_to = "Measure"
+  ) %>%
+  pivot_wider(
+    names_from = c(Sex, Years),
+    values_from = value
+  )
+
+# Income disparities
+table2_income_disp_vent <- income_disp_vent %>%
+  filter(Age == 0) %>%
+  mutate(Type = "Income-Based") %>%
+  pivot_longer(
+    cols = c(SII, RII),
+    names_to = "Measure"
+  ) %>%
+  pivot_wider(
+    names_from = c(Sex, Years),
+    values_from = value
+  ) %>%
+  select(-Age)
+
+# Combine tables
+table2_vent <- bind_rows(
+  table2_med_le_vent,
+  table2_total_disp_vent,
+  table2_income_disp_vent
+)
+
+write.csv(
+  table2_vent,
+  here(appendix, "S5.csv"),
+  row.names = FALSE
+)
+
+
+# Appendix S6 - Population adjustment sensitivity analysis ---------------------
 
 
 load_gc(here(path_onedrive, paste0("le_df_no_pop_adjust_", date, ".Rdata")))
@@ -1018,7 +1370,7 @@ le_comp <- le_df_comp %>%
   )
 
 ggsave(
-  filename = here(appendix, "S2.png"),
+  filename = here(appendix, "S6.png"),
   plot = le_comp,
   width = 10,
   height = 10,
@@ -1027,72 +1379,7 @@ ggsave(
 )
 
 
-# Appendix S3 - Population Distribution ----------------------------------
-
-
-# Load data
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
-
-# Max population
-max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE)
-
-# Distribution of total tract population
-pop_tract_hist <- phila_pop$pop_tract_sex_total_all_fixes %>%
-  inner_join(sex_years) %>%
-  ggplot(aes(x = pop / 1000)) +
-  geom_histogram(
-    bins = 30,
-    colour = "black",
-    fill = "lightblue"
-  ) +
-  labs(
-    x = "Population (thousands)",
-    y = "Count"
-  ) +
-  facet_wrap(~sex_years_lab) +
-  scale_x_continuous(
-    breaks = seq(2, max_pop_total, by = 2)
-  ) +
-  plot_theme(20)
-
-ggsave(
-  filename = here(appendix, "S3a.png"),
-  plot = pop_tract_hist,
-  width = 10,
-  height = 10,
-  dpi = 600
-)
-
-# Distribution of single-age tract population
-pop_tract_age_hist <- phila_pop$pop_age_all_fixes %>%
-  inner_join(sex_years) %>%
-  ggplot(aes(x = pop)) +
-  geom_histogram(
-    bins = 30,
-    colour = "black",
-    fill = "lightblue"
-  ) +
-  labs(
-    x = "Population",
-    y = "Count"
-  ) +
-  facet_wrap(~sex_years_lab) +
-  scale_x_continuous(
-    limits = c(0, 300),
-    breaks = seq(0, 300, by = 50)
-  ) +
-  plot_theme(20)
-
-ggsave(
-  filename = here(appendix, "S3b.png"),
-  plot = pop_tract_age_hist,
-  width = 10,
-  height = 10,
-  dpi = 600
-)
-
-
-# Appendix S5 - Abridged Lifetables  -------------------------------------------
+# Appendix S7 - Abridged Lifetables  -------------------------------------------
 
 
 load_gc(here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
@@ -1158,9 +1445,6 @@ le_abridged_df <- summarise_le_ci(
   obj_name = "le_abridged_df"
 )
 
-le_birth_abridged <- le_abridged_df %>%
-  filter(Age == 0)
-
 le_birth_comp <- le_abridged_df %>%
   filter(Age == 0) %>%
   rename(
@@ -1190,299 +1474,11 @@ le_birth_comp <- le_abridged_df %>%
   plot_theme()
 
 ggsave(
-  filename = here(appendix, "S5.png"),
+  filename = here(appendix, "S7.png"),
   plot = le_birth_comp,
   width = 10,
   height = 10,
   dpi = 600
-)
-
-
-# Appendix S6 - Demographics of Vital Statistics and ACS Data -------------
-
-
-# Load mortality data created in 02-Deaths
-load_gc(here(dir_name, "Philly LE", paste0("phila_deaths_", date, ".Rdata")))
-load_gc(here(dir_name, "Philly LE", paste0("phila_death_counts_", date, ".Rdata")))
-
-# Summary table for age at death in Philadelphia for Appendix S4
-phila_age_at_death_summary <- phila_deaths_nolow %>%
-  group_by(years) %>%
-  summarise(
-    mean = sprintf("%.2f", mean(AGE_DEATH, na.rm = TRUE)),
-    sd = sprintf("%.2f", sd(AGE_DEATH, na.rm = TRUE)),
-    .groups = "drop"
-  ) %>%
-  mutate(sex = "  Total") %>%
-  bind_rows(
-    phila_deaths_nolow %>%
-      group_by(years, sex) %>%
-      summarise(
-        mean = sprintf("%.2f", mean(AGE_DEATH, na.rm = TRUE)),
-        sd = sprintf("%.2f", sd(AGE_DEATH, na.rm = TRUE)),
-        .groups = "drop"
-      ) %>%
-      mutate(sex = paste0("    ", sex))
-  ) %>%
-  mutate(mean_sd = paste0(mean, " (", sd, ")")) %>%
-  pivot_wider(
-    names_from = years,
-    values_from = mean_sd,
-    values_fill = ""
-  ) %>%
-  select(-c(mean, sd)) %>%
-  group_by(sex) %>%
-  summarise(
-    "2017-2019" = paste(`2017-2019`, collapse = ""),
-    "2020-2022" = paste(`2020-2022`, collapse = ""),
-    .groups = "drop"
-  ) %>%
-  bind_rows(
-    c(sex = "Average age at death (SD)", "2017-2019" = "", "2020-2022" = ""),
-    c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")
-  ) %>%
-  rename("Measure" = sex) %>%
-  mutate(Measure = factor(Measure,
-    levels = c(
-      "Average age at death (SD)",
-      "  Total",
-      "  Sex",
-      "    Men",
-      "    Women",
-      "    Unknown"
-    )
-  )) %>%
-  arrange(Measure)
-
-# Summary table of deaths in Philly by year and sex
-phila_death_count_summary_sex <- phila_death_count_nolow_unknown %>%
-  group_by(years, sex) %>%
-  summarise(
-    deaths = sum(deaths),
-    .groups = "drop"
-  ) %>%
-  group_by(years) %>%
-  mutate(
-    total = sum(deaths),
-    pct = deaths / total * 100,
-    deaths_chr = format(deaths, big.mark = ",", scientific = FALSE),
-    sex = paste0("    ", sex)
-  ) %>%
-  bind_rows(
-    phila_death_count_nolow_unknown %>%
-      group_by(years) %>%
-      summarise(
-        deaths = sum(deaths),
-        total = sum(deaths),
-        .groups = "drop"
-      ) %>%
-      mutate(
-        sex = "  Total",
-        pct = deaths / total * 100,
-        deaths_chr = format(deaths, big.mark = ",", scientific = FALSE)
-      )
-  ) %>%
-  mutate(
-    deaths_pct = paste0(
-      deaths_chr,
-      " (",
-      sprintf("%.2f", pct),
-      "%)"
-    )
-  ) %>%
-  pivot_wider(
-    names_from = years,
-    values_from = deaths_pct,
-    values_fill = ""
-  ) %>%
-  select(-c(deaths, pct)) %>%
-  group_by(sex) %>%
-  summarise(
-    "2017-2019" = paste(`2017-2019`, collapse = ""),
-    "2020-2022" = paste(`2020-2022`, collapse = ""),
-    .groups = "drop"
-  ) %>%
-  bind_rows(
-    c(sex = "Number of deaths (%)", "2017-2019" = "", "2020-2022" = ""),
-    c(sex = "  Sex", "2017-2019" = "", "2020-2022" = "")
-  ) %>%
-  rename("Measure" = sex) %>%
-  mutate(Measure = factor(Measure,
-    levels = c(
-      "Number of deaths (%)",
-      "  Total",
-      "  Sex",
-      "    Men",
-      "    Women",
-      "    Unknown"
-    )
-  )) %>%
-  arrange(Measure)
-
-# Summary table of race-ethnicity of Philly deaths for Table 1
-phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
-  filter(!is.na(age)) %>%
-  group_by(years, racehisp) %>%
-  summarise(
-    deaths = n(),
-    .groups = "drop"
-  ) %>%
-  group_by(years) %>%
-  mutate(
-    total = sum(deaths),
-    deaths_chr = format(deaths, big.mark = ",", scientific = FALSE),
-    pct = sprintf("%.2f", deaths / total * 100),
-    deaths_pct = paste0(deaths_chr, " (", pct, "%)"),
-    racehisp = paste0("    ", racehisp)
-  ) %>%
-  pivot_wider(
-    names_from = years,
-    values_from = deaths_pct,
-    values_fill = ""
-  ) %>%
-  select(-c(deaths, pct)) %>%
-  group_by(racehisp) %>%
-  summarise(
-    "2017-2019" = paste(`2017-2019`, collapse = ""),
-    "2020-2022" = paste(`2020-2022`, collapse = ""),
-    .groups = "drop"
-  ) %>%
-  rename("Measure" = racehisp) %>%
-  bind_rows(c(Measure = "  Racial-ethnic group", "2017-2019" = "", "2020-2022" = "")) %>%
-  mutate(Measure = factor(Measure,
-    levels = c(
-      "  Racial-ethnic group", "    Hispanic", "    Non-Hispanic American Indian, Alaska Native",
-      "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
-      "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"
-    )
-  )) %>%
-  arrange(Measure)
-
-# Population weighted MHI and SD - pulling from 03-Population and 06-Analysis files
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")))
-
-# Get average and sd of mhi for Philadelphia
-weighted_mhi_phila <- mhi_sensitivity_inflation %>%
-  inner_join(phila_pop$pop_total_all_fixes) %>%
-  group_by(years) %>%
-  summarise(
-    mean = round(mean(mhi, na.rm = TRUE), 2),
-    wtd.mean = round(weighted_mean(mhi, w = pop, na.rm = T), 2),
-    sd = round(sd(mhi, na.rm = TRUE), 2),
-    wtd.sd = round(sqrt(weighted_var(mhi, w = pop, na.rm = T)), 2),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    wtd_mean_chr = format(wtd.mean, big.mark = ",", scientific = FALSE),
-    wtd_sd_chr = format(wtd.sd, big.mark = ",", scientific = FALSE),
-    wtd_mean_sd = paste0("$", wtd_mean_chr, " (", wtd_sd_chr, ")")
-  ) %>%
-  pivot_wider(
-    names_from = years,
-    values_from = wtd_mean_sd,
-    values_fill = ""
-  ) %>%
-  select(-c(mean, wtd.mean, sd, wtd.sd, wtd_mean_chr, wtd_sd_chr)) %>%
-  summarise_all(~ paste(., collapse = "")) %>%
-  mutate("Measure" = "Population-weighted MHI (SD)") %>%
-  relocate(Measure)
-
-# Appendix S6
-appendix_mort_summary <- bind_rows(
-  phila_age_at_death_summary,
-  phila_death_count_summary_sex,
-  phila_death_count_summary_racehisp,
-  weighted_mhi_phila
-)
-
-write.csv(
-  appendix_mort_summary,
-  file = here(appendix, "S6.csv"),
-  row.names = FALSE
-)
-
-
-# Appendix S7 - Table 2 with Ventiles ------------------------------------
-
-
-load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("le_iter_ventiles_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
-
-# Total disparities
-total_disp_ventiles <- total_disparities(
-  le_df = le_iter_ventiles,
-  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
-  deciles = FALSE
-)
-
-# Income-based disparities
-income_disp_vent <- income_disparities(
-  le_df = le_iter_ventiles,
-  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
-  deciles = FALSE
-)
-
-# Median LE (with P05–P95)
-table2_med_le_vent <- le_birth %>%
-  group_by(sex, years) %>%
-  summarise(
-    le_med = median(med, na.rm = TRUE),
-    le_P05 = quantile(med, 0.05, na.rm = TRUE),
-    le_P95 = quantile(med, 0.95, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    value = sprintf("%.2f [%.2f - %.2f]", le_med, le_P05, le_P95),
-    Type = "",
-    Measure = "Median LE [P05 - P95]"
-  ) %>%
-  select(Type, Measure, sex, years, value) %>%
-  pivot_wider(
-    names_from = c(sex, years),
-    values_from = value
-  )
-
-# Total disparities
-table2_total_disp_vent <- total_disp_ventiles %>%
-  filter(Age == 0) %>%
-  select(Years, Sex, AbsDif, RelDif) %>%
-  mutate(Type = "Total") %>%
-  pivot_longer(
-    cols = c(AbsDif, RelDif),
-    names_to = "Measure"
-  ) %>%
-  pivot_wider(
-    names_from = c(Sex, Years),
-    values_from = value
-  )
-
-# Income disparities
-table2_income_disp_vent <- income_disp_vent %>%
-  filter(Age == 0) %>%
-  mutate(Type = "Income-Based") %>%
-  pivot_longer(
-    cols = c(SII, RII),
-    names_to = "Measure"
-  ) %>%
-  pivot_wider(
-    names_from = c(Sex, Years),
-    values_from = value
-  ) %>%
-  select(-Age)
-
-# Combine tables
-table2_vent <- bind_rows(
-  table2_med_le_vent,
-  table2_total_disp_vent,
-  table2_income_disp_vent
-)
-
-write.csv(
-  table2_vent,
-  here(appendix, "S7.csv"),
-  row.names = FALSE
 )
 
 
@@ -1564,7 +1560,7 @@ tmap_save(
 
 # Load data
 load_gc(here(path_onedrive, paste0("le_iter_deciles_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 le_by_geoid_decile <- le_iter_deciles %>%
   filter(!is.na(le)) %>%
@@ -1639,12 +1635,13 @@ le_change_by_decile_mhi_sensitivity <- compute_income_summary(
 
 # Plot LE by time-varying MHI
 le_decile_plot_mhi_sensitivity <- le_by_decile_mhi_sensitivity %>%
-  filter(Age == 0) %>%
+  filter(Age == 0, !is.na(decile_income)) %>%
   mutate(Years = years) %>%
   plot_income_curve(
     yvar = med,
     type = "decile",
-    color_var = "Years"
+    color_var = "Years",
+    add_smooth = TRUE
   ) +
   scale_x_continuous(limits = c(-0.2, 11), breaks = seq(0, 10, 2)) +
   facet_wrap(~Sex) +
@@ -1659,7 +1656,7 @@ le_decile_plot_mhi_sensitivity <- le_by_decile_mhi_sensitivity %>%
 
 # Plot change in LE by time-varying MHI
 le_change_decile_plot_mhi_sensitivity <- le_change_by_decile_mhi_sensitivity %>%
-  filter(Age == 0) %>%
+  filter(Age == 0, !is.na(decile_income)) %>%
   mutate(Years = years) %>%
   plot_income_curve(
     yvar = med,
@@ -1698,7 +1695,7 @@ ggsave(
 
 # Load data
 load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("le_iter_change_ventiles_", date, ".Rdata")))
 
 # LE by ventile

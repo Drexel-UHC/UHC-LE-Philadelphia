@@ -17,7 +17,6 @@ income_disparities <- function(
   le_df <- le_df %>%
     left_join(pop_df) %>%
     filter(!is.na(le), !is.na(.data[[rank_var]]), !is.na(pop), pop > 0)
-  # filter(!is.na(.data[["le"]]))
 
   summary_vars <- c(
     "Age", "years", "sex",
@@ -28,7 +27,6 @@ income_disparities <- function(
   income_ineq <- le_df %>%
     group_by(across(c(all_of(summary_vars), "iteration"))) %>%
     group_modify(~ {
-      # y <- .x[["le"]]
       y <- .x$le
       w <- .x$pop
 
