@@ -7,6 +7,7 @@
 
 income_disparities <- function(
   le_df,
+  pop_df,
   deciles = TRUE
 ) {
   rank_var <- if (deciles) "decile_income1" else "ventile_income1"
@@ -14,7 +15,8 @@ income_disparities <- function(
 
   # Filter away NA le
   le_df <- le_df %>%
-    filter(!is.na(le))
+    left_join(pop_df) %>%
+    filter(!is.na(le), !is.na(.data[[rank_var]]), !is.na(pop), pop > 0)
   # filter(!is.na(.data[["le"]]))
 
   summary_vars <- c(
@@ -28,15 +30,18 @@ income_disparities <- function(
     group_modify(~ {
       # y <- .x[["le"]]
       y <- .x$le
+      w <- .x$pop
 
       model_sii <- lm(
         reformulate(rank_var, response = "y"),
-        data = .x
+        data = .x,
+        weights = w
       )
 
       model_rii <- lm(
-        reformulate(rank_var, response = "log(pmax(y, 1e-8))"),
-        data = .x
+        reformulate(rank_var, response = "log(y)"),
+        data = .x,
+        weights = w
       )
 
       bind_rows(

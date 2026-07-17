@@ -142,7 +142,6 @@ save(
 
 # Load nimble results and lambdas
 load(file = here(path_onedrive, paste0("nimble_results_", date, ".Rdata")))
-load(file = here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
 
 # Extract intercepts (beta0s)
 beta0 <- extract_param(
@@ -180,6 +179,9 @@ betaij <- extract_param(
   sex_years_df = sex_years
 )
 
+set.seed(123)
+sample_tracts <- sample(unique(betaij$tract), 10)
+
 # Spatial random effects traceplots
 pdf(
   here(working_results, "betaij_traceplots.pdf"),
@@ -188,13 +190,17 @@ pdf(
 )
 
 make_traceplots(
-  betaij,
+  betaij %>% 
+    filter(tract %in% sample_tracts),
   group_vars = c("GEOID", "knot"),
   value_lab = expression(beta[spat])
 ) %>%
   walk(print)
 
 dev.off()
+
+# Spatial random effects ESS
+betaij_ess <- compute_ess(betaij)
 
 # Extract nonspatial random effects
 nonspat <- extract_param(
@@ -213,7 +219,8 @@ pdf(
 )
 
 make_traceplots(
-  nonspat,
+  nonspat %>%
+    filter(tract %in% sample_tracts),
   group_vars = c("GEOID", "knot"),
   value_lab = expression(beta[nonspat])
 ) %>%
@@ -221,7 +228,10 @@ make_traceplots(
 
 dev.off()
 
-# Extract spatial variance parameters
+# Nonspatial random effects ESS
+nonspat_ess <- compute_ess(nonspat)
+
+# Extract spatial precision parameters
 tau <- extract_param(
   nimble_results,
   param = "tau",
@@ -229,7 +239,7 @@ tau <- extract_param(
   sex_years_df = sex_years
 )
 
-# Spatial variance traceplots
+# Spatial precision traceplots
 pdf(
   here(working_results, "tau_traceplots.pdf"),
   width = 10,
@@ -245,10 +255,10 @@ make_traceplots(
 
 dev.off()
 
-# Spatial variance ESS
+# Spatial precision ESS
 tau_ess <- compute_ess(tau)
 
-# Extract nonspatial variance parameters
+# Extract nonspatial precision parameters
 tauns <- extract_param(
   nimble_results,
   param = "tauns",
@@ -256,7 +266,7 @@ tauns <- extract_param(
   sex_years_df = sex_years
 )
 
-# Nonspatial variance traceplots
+# Nonspatial precision traceplots
 pdf(
   here(working_results, "tauns_traceplots.pdf"),
   width = 10,
@@ -272,27 +282,8 @@ make_traceplots(
 
 dev.off()
 
-# Nonspatial variance ESS
+# Nonspatial precision ESS
 tauns_ess <- compute_ess(tauns)
-
-# Lambda traceplots
-pdf(
-  here(working_results, "lambda_traceplots.pdf"),
-  width = 10,
-  height = 8
-)
-
-make_traceplots(
-  lambdas,
-  group_vars = c("GEOID", "age"),
-  value_lab = expression(lambda)
-) %>%
-  walk(print)
-
-dev.off()
-
-# Lambda ESS
-lambda_ess <- compute_ess(lambdas)
 
 
 # Life Expectancy ---------------------------------------------------------

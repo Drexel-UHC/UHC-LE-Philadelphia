@@ -1,36 +1,41 @@
 #' Create income decile or ventile groupings
 #'
-#' @param df Dataframe containing at least `mhi` and `years`
+#' @param mhi_df Dataframe containing at least `mhi` and `years`
+#' @param pop_df Dataframe containing tract x period population totals
 #' @param type Character string specifying the income grouping scheme:
 #'  `"decile"` (10 groups) or `"ventile"` (20 groups)
 #'
 #' @return Dataframe with mhi grouped into deciles or ventiles
 
 add_income_groups <- function(
-  mhi_df,
-  pop_df,
-  type = c("decile", "ventile")
+    mhi_df,
+    pop_df,
+    type = c("decile", "ventile")
 ) {
   type <- match.arg(type)
-
   n_groups <- if_else(type == "decile", 10, 20)
   name <- paste0(type, "_income")
-
+  
   mhi_df %>%
-    inner_join(pop_df) %>%
+    left_join(pop_df, by = c("GEOID", "years")) %>%             
     rename(total_pop = pop) %>%
-    filter(total_pop > 0, !is.na(mhi)) %>%
     group_by(years) %>%
     mutate(
       !!name := {
-        b <- reldist::wtd.quantile(
-          mhi,
-          q = seq(0, 1, length.out = n_groups + 1),
-          weight = total_pop, na.rm = TRUE
-        )
-        b[1] <- -Inf
-        b[length(b)] <- Inf
-        as.numeric(cut(mhi, breaks = b, include.lowest = TRUE))
+        valid <- total_pop > 0 & !is.na(mhi) & !is.na(total_pop)
+        out <- rep(NA_real_, n())
+        if (any(valid)) {
+          b <- reldist::wtd.quantile(
+            mhi[valid],
+            q = seq(0, 1, length.out = n_groups + 1),
+            weight = total_pop[valid],
+            na.rm = TRUE
+          )
+          b[1] <- -Inf
+          b[length(b)] <- Inf
+          out[valid] <- as.numeric(cut(mhi[valid], breaks = b, include.lowest = TRUE))
+        }
+        out
       },
       !!paste0(name, "1") := (.data[[name]] - 1) / (n_groups - 1)
     ) %>%
@@ -64,7 +69,7 @@ compute_income_summary <- function(
 
   le_df %>%
     filter(!is.na(!!value)) %>%
-    inner_join(pop_df, by = c("GEOID", "sex", "years")) %>%
+    left_join(pop_df, by = c("GEOID", "sex", "years")) %>%
     filter(!is.na(pop), pop > 0) %>%
     group_by(Age, years, sex, iteration, !!income_var) %>%
     summarise(

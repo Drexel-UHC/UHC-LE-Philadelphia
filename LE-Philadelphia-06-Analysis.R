@@ -52,6 +52,7 @@ source(here("Helpers", "total_disparities.R"))
 source(here("Helpers", "income_disparities.R"))
 source(here("Helpers", "mhi_helpers.R"))
 source(here("Helpers", "lt_helpers.R"))
+source(here("Helpers", "print_message.R"))
 
 
 # Other Helpers -----------------------------------------------------------
@@ -89,7 +90,8 @@ plot_theme <- function(base_size = 15) {
 load_gc(here(path_onedrive, paste0("le_df_", date, ".Rdata")))
 
 # Dataframe life expectancy at birth by census tract x sex x years (with spatial structure for maps)
-le_birth <- filter(le_df, Age == 0) %>%
+le_birth <- le_df %>%
+  filter(Age == 0) %>%
   left_join(sex_years) %>%
   full_join(phila_sf) %>%
   select(GEOID, Age, lci, med, uci, geometry, sex, years, sex_years, sex_years_lab) %>%
@@ -200,7 +202,11 @@ mhi_2022_to_2010 <- mhi_2022 %>%
   rename(GEOID = GEOID10) %>%
   filter(GEOID %in% phila_tracts)
 
-sum(mhi_2022_to_2010$mhi == 0, na.rm = TRUE)
+print_message(
+  "Tracts with 0 mhi" =
+    sum(mhi_2022_to_2010$mhi == 0, na.rm = TRUE)
+)
+# Tracts with 0 mhi: 0
 
 # Baseline MHI (use 2019 for both periods)
 mhi <- bind_rows(
@@ -212,8 +218,13 @@ mhi <- bind_rows(
   select(GEOID, years, mhi) %>%
   set_lowpop_na("mhi")
 
-sum(mhi$mhi == 0, na.rm = TRUE) # 0
-sum(is.na(mhi$mhi)) # 24
+print_message(
+  "Tracts with 0 mhi" = sum(mhi$mhi == 0, na.rm = TRUE),
+  "Tracts with NA mhi" = sum(is.na(mhi$mhi))
+)
+
+# Tracts with 0 mhi: 0
+# Tracts with NA mhi: 24
 
 save(
   mhi,
@@ -230,23 +241,32 @@ mhi_sensitivity <- bind_rows(
   select(GEOID, years, mhi) %>%
   set_lowpop_na("mhi")
 
-sum(mhi_sensitivity$mhi == 0, na.rm = TRUE) # 3
-sum(is.na(mhi_sensitivity$mhi)) # 24
+print_message(
+  "Tracts with 0 mhi" = sum(mhi_sensitivity$mhi == 0, na.rm = TRUE),
+  "Tracts with NA mhi" = sum(is.na(mhi_sensitivity$mhi))
+)
+
+# Tracts with 0 mhi: 0
+# Tracts with NA mhi: 27
 
 save(
   mhi_sensitivity,
   file = here(path_onedrive, paste0("mhi_sensitivity_", date, ".Rdata"))
 )
 
+print_message("2019 -> 2022 inflation factor" = adjust_for_inflation(
+  1,
+  from_date = 2019, to_date = 2022, country = "US"
+))
+# 2019 -> 2022 inflation factor: 1.144715
+
+inflation_factor <- 1.144715
+
 # Adjust MHI for inflation (to 2022 dollars)
 adjust_mhi <- function(df) {
   df %>%
     mutate(
-      mhi = if_else(
-        years == "2017-2019",
-        adjust_for_inflation(mhi, from_date = 2019, to_date = 2022, country = "US"),
-        adjust_for_inflation(mhi, from_date = 2022, to_date = 2022, country = "US")
-      )
+      mhi = if_else(years == "2017-2019", mhi * inflation_factor, mhi)
     )
 }
 
@@ -259,12 +279,13 @@ mhi_inflation <- rbind(
     adjust_mhi() %>%
     mutate(years = "2020-2022")
 )
-mhi_sensitivity_inflation <- adjust_mhi(mhi_sensitivity)
 
 save(
   mhi_inflation,
   file = here(path_onedrive, paste0("mhi_inflation_", date, ".Rdata"))
 )
+
+mhi_sensitivity_inflation <- adjust_mhi(mhi_sensitivity)
 
 save(
   mhi_sensitivity_inflation,
@@ -318,15 +339,10 @@ load_gc(here(path_onedrive, paste0("mhi_deciles_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("mhi_deciles_sensitivity_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("mhi_ventiles_", date, ".Rdata")))
 
-le_iter_change <- compute_le_change(
-  le_df = le_iter_df,
-  value = "le",
-  iteration = TRUE
-)
-
 # Deciles
 le_iter_deciles <- build_le_mhi(
-  le_df = le_iter_df,
+  le_df = le_iter_df %>%
+    filter(Age == 0),
   mhi_df = mhi_deciles,
   value_col = "le",
   is_change = FALSE
@@ -338,7 +354,8 @@ save(
 )
 
 le_iter_deciles_mhi_sensitivity <- build_le_mhi(
-  le_df = le_iter_df,
+  le_df = le_iter_df %>%
+    filter(Age == 0),
   mhi_df = mhi_deciles_sensitivity,
   value_col = "le",
   is_change = FALSE
@@ -347,6 +364,13 @@ le_iter_deciles_mhi_sensitivity <- build_le_mhi(
 save(
   le_iter_deciles_mhi_sensitivity,
   file = here(path_onedrive, paste0("le_iter_deciles_mhi_sensitivity_", date, ".Rdata"))
+)
+
+le_iter_change <- compute_le_change(
+  le_df = le_iter_df %>%
+    filter(Age == 0),
+  value = "le",
+  iteration = TRUE
 )
 
 le_iter_change_deciles <- build_le_mhi(
@@ -375,7 +399,8 @@ save(
 
 # Ventiles
 le_iter_ventiles <- build_le_mhi(
-  le_df = le_iter_df,
+  le_df = le_iter_df %>%
+    filter(Age == 0),
   mhi_df = mhi_ventiles,
   value_col = "le",
   is_change = FALSE
@@ -413,7 +438,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
     select(c("age", "sex", "years", "sex_years", "sex_years_lab", "theta_star"))) %>%
   mutate(
     offset = med - theta_star,
-    offset_lci = uci - theta_star,
+    offset_lci = lci - theta_star,
     offset_uci = uci - theta_star,
     crude = case_when(
       deaths == 0 ~ NA_real_,
@@ -486,7 +511,6 @@ table2_total <- total_disparities(
   le_df = le_iter_deciles,
   pop_df = phila_pop$pop_tract_sex_total_all_fixes
 ) %>%
-  filter(Age == 0) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
   mutate(
     Type = "Total"
@@ -503,9 +527,9 @@ table2_total <- total_disparities(
 # Income disparities
 table2_income <- income_disparities(
   le_df = le_iter_deciles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   deciles = TRUE
 ) %>%
-  filter(Age == 0) %>%
   mutate(
     Type = "Income-Based"
   ) %>%
@@ -549,9 +573,22 @@ t1_order <- le_birth %>%
 # LE
 le_plot <- le_birth %>%
   left_join(t1_order, by = c("GEOID", "sex")) %>%
-  ggplot(aes(x = med, y = reorder(med, order), colour = years)) +
+  ggplot(
+    aes(
+      x = med,
+      y = reorder(med, order),
+      colour = years
+    )
+  ) +
   geom_point() +
-  geom_segment(aes(x = lci, xend = uci, yend = reorder(med, order)), alpha = 0.4) +
+  geom_segment(
+    aes(
+      x = lci,
+      xend = uci,
+      yend = reorder(med, order)
+    ),
+    alpha = 0.4
+  ) +
   plot_theme() +
   theme(
     axis.title.y = element_blank(),
@@ -575,7 +612,6 @@ le_birth_change <- le_iter_change_deciles %>%
     uci = quantile(change, 0.975, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  # summarise_ci(change) %>%
   group_by(sex) %>%
   mutate(order = rank(med)) %>%
   ungroup()
@@ -587,10 +623,25 @@ save(
 
 # Change in LE
 change_plot <- le_birth_change %>%
-  ggplot(aes(x = med, y = reorder(med, order))) +
+  ggplot(
+    aes(
+      x = med,
+      y = reorder(med, order)
+    )
+  ) +
   geom_point() +
-  geom_segment(aes(x = lci, xend = uci, yend = reorder(med, order)), alpha = 0.6) +
-  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_segment(
+    aes(
+      x = lci,
+      xend = uci,
+      yend = reorder(med, order)
+    ),
+    alpha = 0.6
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
   plot_theme() +
   theme(
     axis.title.y = element_blank(),
@@ -601,10 +652,13 @@ change_plot <- le_birth_change %>%
   facet_wrap(~sex, scales = "free_y") +
   scale_x_continuous(
     sec.axis = dup_axis(name = NULL),
-    breaks = round(seq(floor(min(le_birth_change$lci, na.rm = T) / 5) * 5,
-      ceiling(max(le_birth_change$uci, na.rm = T) / 5) * 5,
-      by = 5
-    ))
+    breaks = round(
+      seq(
+        floor(min(le_birth_change$lci, na.rm = T) / 5) * 5,
+        ceiling(max(le_birth_change$uci, na.rm = T) / 5) * 5,
+        by = 5
+      )
+    )
   ) +
   labs(x = "Change in LE at Birth")
 
@@ -874,10 +928,6 @@ figure4_le <- le_by_decile %>%
     type = "decile",
     color_var = "Years"
   ) +
-  scale_y_continuous(
-    limits = c(60, 85),
-    breaks = seq(60, 85, 5)
-  ) +
   scale_x_continuous(
     limits = c(-0.2, 11),
     breaks = seq(0, 10, 2)
@@ -946,12 +996,20 @@ le_df_comp <- le_df %>%
   inner_join(sex_years) %>%
   filter(Age == 0) %>%
   mutate(diff = le_no_pop_adjust - le)
-sum(le_df_comp$diff)
 
 le_comp <- le_df_comp %>%
-  ggplot(aes(x = le, y = le_no_pop_adjust)) +
+  ggplot(
+    aes(
+      x = le,
+      y = le_no_pop_adjust
+    )
+  ) +
   geom_point() +
-  geom_abline(slope = 1, intercept = 0, col = "red") +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    col = "red"
+  ) +
   facet_wrap(~sex_years_lab) +
   plot_theme() +
   labs(
@@ -982,8 +1040,15 @@ max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE)
 pop_tract_hist <- phila_pop$pop_tract_sex_total_all_fixes %>%
   inner_join(sex_years) %>%
   ggplot(aes(x = pop / 1000)) +
-  geom_histogram(bins = 30, colour = "black", fill = "lightblue") +
-  labs(x = "Population (thousands)", y = "Count") +
+  geom_histogram(
+    bins = 30,
+    colour = "black",
+    fill = "lightblue"
+  ) +
+  labs(
+    x = "Population (thousands)",
+    y = "Count"
+  ) +
   facet_wrap(~sex_years_lab) +
   scale_x_continuous(
     breaks = seq(2, max_pop_total, by = 2)
@@ -1002,8 +1067,15 @@ ggsave(
 pop_tract_age_hist <- phila_pop$pop_age_all_fixes %>%
   inner_join(sex_years) %>%
   ggplot(aes(x = pop)) +
-  geom_histogram(bins = 30, colour = "black", fill = "lightblue") +
-  labs(x = "Population", y = "Count") +
+  geom_histogram(
+    bins = 30,
+    colour = "black",
+    fill = "lightblue"
+  ) +
+  labs(
+    x = "Population",
+    y = "Count"
+  ) +
   facet_wrap(~sex_years_lab) +
   scale_x_continuous(
     limits = c(0, 300),
@@ -1020,7 +1092,7 @@ ggsave(
 )
 
 
-# Appendix S5 - Abridged Lifetables -----------------------------------------------------
+# Appendix S5 - Abridged Lifetables  -------------------------------------------
 
 
 load_gc(here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
@@ -1098,16 +1170,24 @@ le_birth_comp <- le_abridged_df %>%
   ) %>%
   inner_join(sex_years) %>%
   inner_join(le_birth) %>%
-  ggplot(aes(x = med, y = med_abr)) +
+  ggplot(
+    aes(
+      x = med,
+      y = med_abr
+    )
+  ) +
   geom_point() +
-  geom_abline(slope = 1, intercept = 0, col = "red") +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    col = "red"
+  ) +
   facet_wrap(~sex_years_lab) +
   labs(
     x = "LE at Birth (Full Lifetable)",
     y = "LE at Birth (Abridged Lifetable)"
   ) +
   plot_theme()
-le_birth_comp
 
 ggsave(
   filename = here(appendix, "S5.png"),
@@ -1340,6 +1420,7 @@ total_disp_ventiles <- total_disparities(
 # Income-based disparities
 income_disp_vent <- income_disparities(
   le_df = le_iter_ventiles,
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
   deciles = FALSE
 )
 
@@ -1487,27 +1568,36 @@ load_gc(here(path_onedrive, paste0("phila_pop_", date, ".rdata")))
 
 le_by_geoid_decile <- le_iter_deciles %>%
   filter(!is.na(le)) %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
-  filter(!is.na(le), !is.na(pop), pop > 0) %>%
   group_by(Age, years, sex, GEOID, decile_income) %>%
   summarise(
-    wtdle = weighted.mean(le, w = pop),
+    le = median(le),
     .groups = "drop"
   )
 
 # Plots of LE by MHI decile with SII - main analysis
 le_by_decile_boxplots <- le_by_geoid_decile %>%
-  filter(Age == 0) %>%
   mutate(Years = years) %>%
-  ggplot(aes(x = decile_income, y = wtdle)) +
-  geom_boxplot(aes(group = interaction(decile_income, years), color = Years, fill = Years), alpha = 0.35) +
+  ggplot(aes(
+    x = decile_income,
+    y = le
+  )) +
+  geom_boxplot(
+    aes(
+      group = interaction(decile_income, years),
+      color = Years,
+      fill = Years
+    ),
+    alpha = 0.35
+  ) +
   labs(
     x = "Decile of Median Household Income",
     y = "LE at Birth (Years)"
   ) +
   guides(col = NULL) +
-  scale_y_continuous(limits = c(60, 85), breaks = seq(60, 85, by = 5)) +
-  scale_x_continuous(limits = c(-0.2, 11), breaks = seq(0, 10, by = 2)) +
+  scale_x_continuous(
+    limits = c(-0.2, 11),
+    breaks = seq(0, 10, by = 2)
+  ) +
   plot_theme() +
   theme(
     strip.background = element_blank()
@@ -1556,7 +1646,6 @@ le_decile_plot_mhi_sensitivity <- le_by_decile_mhi_sensitivity %>%
     type = "decile",
     color_var = "Years"
   ) +
-  scale_y_continuous(limits = c(60, 85), breaks = seq(60, 85, 5)) +
   scale_x_continuous(limits = c(-0.2, 11), breaks = seq(0, 10, 2)) +
   facet_wrap(~Sex) +
   labs(
@@ -1638,7 +1727,6 @@ appendix_le_ventile <- le_by_ventile %>%
     type = "ventile",
     color_var = "Years"
   ) +
-  scale_y_continuous(limits = c(60, 85), breaks = seq(60, 85, 5)) +
   scale_x_continuous(limits = c(-0.2, 21), breaks = seq(0, 20, 2)) +
   facet_wrap(~Sex) +
   labs(
