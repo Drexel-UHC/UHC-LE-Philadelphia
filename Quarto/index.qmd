@@ -326,13 +326,6 @@ make_decile_plot_hc <- function(statistic, age_input, sex_input) {
         "      s += '<span style=\"color:' + p.series.color + '\">' + p.series.name + '</span>: <b>' + p.point.tooltip + '</b><br/>';",
         "    }",
         "  });",
-        "  s += '<br/><b>Trend (SII)</b><br/>';",
-        "  this.points.forEach(function(p) {",
-        "    if (p.series.name.indexOf(' trend') !== -1) {",
-        "      var yrs = p.series.name.replace(' trend', '');",
-        "      s += '<span style=\"color:' + p.series.color + '\">' + yrs + '</span>: <b>' + p.point.custom + '</b><br/>';",
-        "    }",
-        "  });",
         "  return s;",
         "}"
       ))
@@ -395,7 +388,7 @@ make_decile_plot_hc <- function(statistic, age_input, sex_input) {
 
 ### Mean Life Expectancy at Birth by Income Decile
 
-These plots depict mean life expectancy at birth by deciles of median household income.
+In these figures, median household income refers to the baseline (2017-2019) median household income, adjusted to 2022 dollars. Points on these plots represent median population-weighted average LE each population-weighted median household income decile. 
 
 ```{r}
 #| label: le_decile_mean_plots
