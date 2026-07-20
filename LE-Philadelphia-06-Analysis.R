@@ -110,6 +110,7 @@ save(le_birth,
 
 # Load LE at birth data created above
 load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 # Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
@@ -513,7 +514,8 @@ table2_med_le <- le_birth %>%
 # Total disparities
 table2_total <- total_disparities(
   le_df = le_iter_deciles,
-  pop_df = phila_pop$pop_tract_sex_total_all_fixes
+  pop_df = phila_pop$pop_tract_sex_total_all_fixes,
+  deciles = TRUE
 ) %>%
   select(Years, Sex, AbsDif, RelDif) %>%
   mutate(
@@ -679,6 +681,14 @@ ggsave(
   dpi = 600
 )
 
+ggsave(
+  filename = here(main_text, "figure1.pdf"),
+  plot = figure1,
+  width = 10,
+  height = 12,
+  dpi = 600
+)
+
 
 # Figure 2 - Maps of LE at Birth ------------------------------------------
 
@@ -745,6 +755,15 @@ le_maps <- tmap_arrange(
 tmap_save(
   le_maps,
   filename = here(main_text, "figure2.png"),
+  width = 14,
+  height = 14,
+  units = "in",
+  dpi = 600
+)
+
+tmap_save(
+  le_maps,
+  filename = here(main_text, "figure2.pdf"),
   width = 14,
   height = 14,
   units = "in",
@@ -884,6 +903,15 @@ tmap_save(
   dpi = 600
 )
 
+tmap_save(
+  le_change_post_prob_maps,
+  filename = here(main_text, "figure3.pdf"),
+  width = 14,
+  height = 14,
+  units = "in",
+  dpi = 600
+)
+
 
 # Figure 4 - LE/Change in LE by MHI Decile --------------------------------
 
@@ -972,6 +1000,14 @@ figure4 <- ggarrange(
 
 ggsave(
   here(main_text, "figure4.png"),
+  figure4,
+  width = 10,
+  height = 11,
+  dpi = 600
+)
+
+ggsave(
+  here(main_text, "figure4.pdf"),
   figure4,
   width = 10,
   height = 11,

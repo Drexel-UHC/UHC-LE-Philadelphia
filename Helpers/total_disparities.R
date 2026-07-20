@@ -31,7 +31,8 @@ total_disparities <- function(
         ratio    = quants[2] / quants[1]
       ) %>% as_tibble()
     }) %>%
-    group_by(c("Age", "sex", "years", "sex_years", "sex_years_lab")) %>%
+    ungroup() %>%
+    group_by(Age, sex, years, sex_years, sex_years_lab) %>%
     summarise(
       med_dif = as.numeric(quantile(dif, probs = 0.5)),
       uci_dif = as.numeric(quantile(dif, probs = 0.975)),
