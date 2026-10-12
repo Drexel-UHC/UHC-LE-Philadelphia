@@ -1,6 +1,6 @@
 #' Compute population-weighted total disparity measures
 #'
-#' @param le_df Dataframe containing iteration-level life expectancy estimates
+#' @param le_df Dataframe containing iteration-level life expectancy estimates (output of `build_le_mhi()`)
 #' @param pop_df Dataframe containing population estimates at the same level as life expectancy
 #' @param deciles Logical indicating whether disparities should be calculated using the 10th and 90th weighted percentiles (`TRUE`) or using the 5th and 95th weighted percentiles (`FALSE`)
 #'
@@ -11,9 +11,6 @@ total_disparities <- function(
   pop_df,
   deciles = TRUE
 ) {
-  # Remove scientific notation
-  options(scipen = 999)
-
   if (deciles) {
     pctiles <- c(0.1, 0.9)
   } else {
@@ -22,7 +19,7 @@ total_disparities <- function(
 
   le_df %>%
     filter(!is.na(le)) %>%
-    inner_join(pop_df) %>%
+    inner_join(pop_df, by = c("GEOID", "sex", "years")) %>%
     group_by(iteration, Age, sex, years, sex_years, sex_years_lab) %>%
     group_modify(~ {
       quants <- reldist::wtd.quantile(x = .x$le, q = pctiles, weight = .x$pop)

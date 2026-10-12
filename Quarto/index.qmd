@@ -62,13 +62,13 @@ le_birth_sf <- st_as_sf(le_birth)
 make_maps <- function(sex_input, yr_input, measure) {
   # LE at birth maps
   if (measure == "Life Expectancy at Birth") {
-    popup_label <- "LE (95% CI)"
+    popup_label <- "LE (95% CrI)"
     # Prep data
     d <- le_birth_sf %>%
       filter(sex == sex_input, years == yr_input) %>%
       mutate(
-        val = round(med, 2),
-        popup_value = paste0(round(med, 2), " (", round(lci, 2), ", ", round(uci, 2), ")"),
+        val = med,
+        popup_value = sprintf("%.2f (%.2f, %.2f)", med, lci, uci),
         popup = paste0(
           "<b>GEOID:</b> ", GEOID,
           "<br><b>", popup_label, ":</b> ",
@@ -87,9 +87,6 @@ make_maps <- function(sex_input, yr_input, measure) {
     # Legend title
     legend <- "LE (Years)"
 
-    # Popul label
-    popup_label <- "LE (95% CI)"
-
     # Map title
     title <- paste0(sex_input, " - ", yr_input)
 
@@ -97,19 +94,22 @@ make_maps <- function(sex_input, yr_input, measure) {
     scale <- tm_scale_intervals(
       style = "fixed",
       breaks = breaks,
-      label.format = list(text.separator = "to"),
+      label.format = list(
+        text.separator = "to",
+        digits = 2
+      ),
       values = pal,
       label.na = "NA"
     )
     # Change in LE at birth maps
   } else if (measure == "Change in LE") {
-    popup_label <- "Change in LE (Years) (95% CI)"
+    popup_label <- "Change in LE (Years) (95% CrI)"
     # Prep data
     d <- le_change_sf %>%
       filter(sex == sex_input) %>%
       mutate(
-        val = round(med, 2),
-        popup_value = paste0(round(med, 2), " (", round(lci, 2), ", ", round(uci, 2), ")"),
+        val = med,
+        popup_value = sprintf("%.2f (%.2f, %.2f)", med, lci, uci),
         popup = paste0(
           "<b>GEOID:</b> ", GEOID,
           "<br><b>", popup_label, ":</b> ",
@@ -118,17 +118,16 @@ make_maps <- function(sex_input, yr_input, measure) {
       )
 
     # Compute Jenks breaks for change in LE at birth
-    n_breaks <- 5
-    breaks <- classIntervals(d$val, n = n_breaks, style = "jenks")$brks
+    n_breaks_decline <- 4
+    declines <- na.omit(d$val[d$val < 0])
+    breaks_decline <- classIntervals(declines, n = n_breaks_decline, style = "jenks")$brks
+    breaks <- c(head(breaks_decline, -1), 0, max(d$val, na.rm = TRUE))
 
     # Color palette
-    pal <- colorRampPalette(c("red", "white", "green"))(n_breaks)
+    pal <- c(colorRampPalette(c("#FF0000", "#FFE5E5"))(n_breaks_decline), "#92C5DE")
 
     # Legend title
     legend <- "Change in LE (Years)"
-
-    # Popup label
-    popup_label <- "Change in LE (Years)"
 
     # Map title
     title <- paste0(sex_input)
@@ -137,19 +136,22 @@ make_maps <- function(sex_input, yr_input, measure) {
     scale <- tm_scale_intervals(
       style = "fixed",
       breaks = breaks,
-      label.format = list(text.separator = "to"),
+      label.format = list(
+        text.separator = "to",
+        digits = 2
+      ),
       values = pal,
       label.na = "NA"
     )
     # Posterior probability maps
   } else {
-    popup_label <- "Pr(Decrease in LE)"
+    popup_label <- "P(change in LE < 0) (%)"
     # Prep data
     d <- post_prob_sf %>%
       filter(sex == sex_input) %>%
       mutate(
         val = round(prob_decr, 2),
-        popup_value = paste0(round(prob_decr, 1), "%"),
+        popup_value = sprintf("%.1f%%", prob_decr),
         popup = paste0(
           "<b>GEOID:</b> ", GEOID,
           "<br><b>", popup_label, ":</b> ",
@@ -161,10 +163,7 @@ make_maps <- function(sex_input, yr_input, measure) {
     pal <- brewer.pal(7, "RdBu")[7:1]
 
     # Legend title
-    legend <- "Posterior Probability"
-
-    # Popup label
-    popup_label <- "Pr(Decrease in LE)"
+    legend <- "P(change in\nLE < 0) (%)"
 
     # Map title
     title <- paste0(sex_input)
@@ -236,7 +235,7 @@ tmap_arrange(
 
 ### Change in Life Expectancy at Birth
 
-These maps show median change in life expectancy at birth from 2017---2019 to 2020---2022 (and 95% credible intervals) for each census tract in Philadelphia. 
+These maps show median change in life expectancy at birth from 2017--2019 to 2020--2022 (and 95% credible intervals) for each census tract in Philadelphia. 
 
 ```{r}
 #| label: le_change_maps
@@ -256,7 +255,7 @@ tmap_arrange(
 
 ### Posterior Probability of a Decrease in Life Expectancy at Birth
 
-These maps show the posterior probability of a decrease in life expectancy at birth from 2017---2019 to 2020---2022 for each census tract in Philadelphia. 
+These maps show the posterior probability of a decrease in life expectancy at birth from 2017--2019 to 2020--2022 for each census tract in Philadelphia. 
 
 ```{r}
 #| label: post_prob_maps
@@ -281,9 +280,6 @@ tmap_arrange(
 #| echo: true
 #| code-fold: true
 #| output: false
-
-# Load highcharter library
-library(highcharter)
 
 # Function to create plots
 make_decile_plot_hc <- function(statistic, age_input, sex_input) {
@@ -343,18 +339,9 @@ make_decile_plot_hc <- function(statistic, age_input, sex_input) {
   for (yrs in c("2017-2019", "2020-2022")) {
     d <- filtered_data %>% filter(years == yrs)
     lm_fit <- lm(med ~ decile_income, data = d)
-    # Descriptive SII: difference in fitted LE across the full decile range,
-    # based on the OLS fit to decile-level medians (not the formal
-    # tract-level posterior SII estimate)
-    sii_val <- diff(range(predict(
-      lm_fit,
-      newdata = data.frame(decile_income = range(d$decile_income))
-    )))
     lm_df <- d %>%
-      mutate(
-        le_fitted = predict(lm_fit, newdata = d),
-        sii_text = paste0(sprintf("%.2f", sii_val), " years")
-      )
+      mutate(le_fitted = predict(lm_fit, newdata = d))
+
     hc <- hc |>
       hc_add_series(
         data = d,
@@ -373,7 +360,7 @@ make_decile_plot_hc <- function(statistic, age_input, sex_input) {
       hc_add_series(
         data = lm_df,
         type = "line",
-        hcaes(x = decile_income, y = le_fitted, custom = sii_text),
+        hcaes(x = decile_income, y = le_fitted),
         name = paste0(yrs, " trend"),
         color = colors[yrs],
         dashStyle = "Dash",
@@ -388,7 +375,7 @@ make_decile_plot_hc <- function(statistic, age_input, sex_input) {
 
 ### Mean Life Expectancy at Birth by Income Decile
 
-In these figures, median household income refers to the baseline (2017-2019) median household income, adjusted to 2022 dollars. Points on these plots represent median population-weighted average LE each population-weighted median household income decile. 
+In these figures, median household income refers to the baseline (2017--2019) median household income, adjusted to 2022 dollars. Points on these plots represent median population-weighted average LE in each population-weighted median household income decile. 
 
 ```{r}
 #| label: le_decile_mean_plots

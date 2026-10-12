@@ -1,11 +1,11 @@
 #' Create traceplots of parameters from nimble
 #'
-#' @param data Dataframe of parameter values with iterations in columns
+#' @param data Dataframe of parameter values with iterations in columns (output of `extract_param()`)
 #' @param group_vars Character vector indicating levels at which parameters are grouped
-#' @param facet_var Character vector indicating what numbers in parameter names represent
-#' @param value_lab Character input for y-axis label
+#' @param facet_var Column used to facet traceplots (defaults to `sex_years_lab`)
+#' @param value_lab Character string or expression for the y-axis label
 #'
-#' @return List of traceplots by groupings
+#' @returns List of traceplots by groupings
 
 make_traceplots <- function(
   data,
@@ -60,9 +60,9 @@ make_traceplots <- function(
 
 #' Compute effective sample size (ESS) of nimble parameters
 #'
-#' @param data Dataframe of parameter values with iterations in columns
+#' @param data Dataframe of parameter values with iterations in columns (output of `extract_param()`)
 #'
-#' @return Dataframe including ESS for each parameter
+#' @returns Dataframe including ESS for each parameter
 
 compute_ess <- function(data) {
   iter_cols <- grep("^iter_", names(data), value = TRUE)

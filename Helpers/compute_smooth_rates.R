@@ -1,11 +1,13 @@
 #' Compute age-specific mortality rates
 #'
+#' Requires `sex_years` and `low_pop` in the global environment.
+#'
 #' @param death_df Dataframe containing death counts by census tract, period, age, and sex
 #' @param pop_df Dataframe containing population estimates by census tract, period, age, and sex
 #'
 #' @returns A list containing `death_rates_age_tract` (dataframe with tract-level mortality and log mortality rates by age and sex) and `death_rates_age` (dataframe with aggregated age-specific mortality and log mortality rates with smoothed log mortality schedules for each sex-period strata)
 
-compute_smoothed_rates <- function(
+compute_smooth_rates <- function(
   death_df,
   pop_df
 ) {
@@ -53,25 +55,6 @@ compute_smoothed_rates <- function(
     "total deaths" = total_deaths,
     "total pop" = total_pop
   )
-  # cat(sprintf(
-  #   paste0(
-  #     "unique GEOIDs: %s\n",
-  #     "GEOID x years x sex x age combinations where deaths were capped: %s\n",
-  #     "deaths removed because deaths > pop: %s (%s%% of total)\n",
-  #     "deaths in low pop tracts (should be 0): %s\n",
-  #     "pop in low pop tracts (should be 0): %s\n",
-  #     "total deaths: %s\n",
-  #     "total pop: %s\n"
-  #   ),
-  #   format(n_geo, big.mark = ","),
-  #   format(n_deaths_capped, big.mark = ","),
-  #   format(deaths_removed, big.mark = ","),
-  #   format(round(deaths_removed / (total_deaths + deaths_removed) * 100, 1), big.mark = ","),
-  #   format(low_pop_deaths, big.mark = ","),
-  #   format(low_pop_pop, big.mark = ","),
-  #   format(total_deaths, big.mark = ","),
-  #   format(total_pop, big.mark = ",")
-  # ))
 
   # Summarize across GEOIDs
   death_rates_age <- death_rates_age_tract %>%

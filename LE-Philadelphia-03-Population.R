@@ -19,7 +19,6 @@ path_onedrive <- here("Data - Cleansed")
 # Load relevant crosswalks
 load(file = here(path_onedrive, "geoid_crosswalk.Rdata"))
 load(file = here(path_onedrive, "phila_tracts_age_grp_sexes_years.Rdata"))
-load(file = here(path_onedrive, "phila_tracts_ages_sexes_years.Rdata"))
 load(file = here(path_onedrive, "age_grp.Rdata"))
 load(file = here(path_onedrive, "phila_sf.Rdata"))
 load(file = here(path_onedrive, "phila_sf_cross.Rdata"))
@@ -223,7 +222,7 @@ print_message(
   "End zeros" =
     phila_pop_age_grp_all_fixes %>%
       ungroup() %>%
-      pull(beginning_zero) %>%
+      pull(end_zero) %>%
       sum(na.rm = TRUE),
   "Added population from end zero adjustments" =
     sum(phila_pop_age_grp_all_fixes$pop[which(phila_pop_age_grp_all_fixes$end_zero)]),
@@ -242,11 +241,11 @@ print_message(
 # Beginning zeros: 2
 # Added population from beginning zero adjustments: 6.093
 # % of total population: 0.00006452719
-# End zeros: 2
+# End zeros: 8
 # Added population from end zero adjustments: 55.9311
 # % of total population: 0.0005923316
 # Additional population from adjustments: 458.6172
-# Population in removed tracts: 0
+# Population in removed tracts: 0 
 
 
 ## Single year age groups --------------------------------------------------
@@ -399,7 +398,7 @@ phila_pop_total_all_fixes <- phila_pop_age_grp_all_fixes %>%
     pop = sum(pop),
     .groups = "drop"
   ) %>%
-  inner_join(phila_sf_cross) %>%
+  inner_join(phila_sf_cross, by = "GEOID") %>%
   arrange(years, tract)
 
 print_message(
@@ -424,3 +423,4 @@ save(
   phila_pop,
   file = here(path_onedrive, paste0("phila_pop_", date, ".Rdata"))
 )
+phila_pop_age_grp_no_low

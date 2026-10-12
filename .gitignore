@@ -6,6 +6,7 @@
 /Writing/
 /Data/Hidden/
 /Results/
+/Data/pop_tract_philly.rdata
 /Data/ltdb_ct20toct10_xwalk_files/
 /Data/us.2006_2022.tract.level.pops.txt
 /Data/us.2006_2023.tract.level.pops.txt
@@ -19,6 +20,8 @@ Data Team Meeting.qmd
 .positai
 LE-Philadelphia-03-Population-OLD-WITH-5.R
 LE-Philadelphia-06-Analysis-OLD.R
+LE-Philadelphia-Open-Age-Test.R
 post prob reviewer response.R
 table2_changes.R
 weighted_summary.R
+*.sr.lock

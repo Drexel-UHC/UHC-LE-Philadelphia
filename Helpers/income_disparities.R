@@ -1,7 +1,8 @@
 #' Compute income-based disparities in life expectancy
 #'
-#' @param le_df Dataframe containing iteration-level life expectancy estimates
-#' @param deciles Logical indicating whether disparities should be calculated using the 10th and 90th weighted percentiles (`TRUE`) or using the 5th and 95th weighted percentiles (`FALSE`)
+#' @param le_df Dataframe containing iteration-level life expectancy estimates (output of `build_le_mhi()`)
+#' @param pop_df Dataframe containing population estimates used for weighting
+#' @param deciles Logical indicating whether disparities should be calculated using deciles (10th and 90th weighted percentiles; `TRUE`) or using ventiles (5th and 95th weighted percentiles; `FALSE`)
 #'
 #' @returns A dataframe containing medians and 95% CIs of SII and RII estimates
 
@@ -15,7 +16,7 @@ income_disparities <- function(
 
   # Filter away NA le
   le_df <- le_df %>%
-    left_join(pop_df) %>%
+    left_join(pop_df, by = c("GEOID", "sex", "years")) %>%
     filter(!is.na(le), !is.na(.data[[rank_var]]), !is.na(pop), pop > 0)
 
   summary_vars <- c(

@@ -1,10 +1,12 @@
 #' Compute change in LE between periods
 #'
-#' @param df List containing numeric outputs from nimble model
-#' @param value Character variable matching parameter name from nimble model
-#' @param iteration Character vector indicating what numbers in parameter names represent
+#' Requires `set_lowpop_na()` and `low_pop` in the global environment (defined in 06-Analysis).
 #'
-#' @return Dataframe of parameter values with iterations in columns
+#' @param le_df Dataframe of iteration-level life expectancy (GEOID, Age, sex, years, iteration) (output of `build_le_iter()`)
+#' @param value Name of the life expectancy column
+#' @param iteration Logical indicating whether to keep iteration-level results
+#'
+#' @returns Dataframe with life expectancy in each period and the change between periods
 
 compute_le_change <- function(
   le_df,

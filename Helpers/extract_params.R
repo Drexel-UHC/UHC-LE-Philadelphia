@@ -1,14 +1,14 @@
 #' Extract parameter value from nimble results
 #'
-#' @param nimble_results List containing numeric outputs from nimble model
+#' @param nimble_results List containing numeric outputs from nimble model (output of `run_nimble_parallel()`)
 #' @param param Character variable matching parameter name from nimble model
 #' @param index_names Character vector indicating what numbers in parameter names represent
 #' @param tract_ids Dataframe crosswalking tract ids with GEOIDs
 #' @param sex_years_df Dataframe crosswalking sex x year combinations
-#' @param save_path Character input for where results should be saved
-#' @param obj_name Character input for object name in environment
+#' @param save_path Optional file path to save the output (not saved if `NULL`)
+#' @param obj_name Name of the object stored in the saved .Rdata file
 #'
-#' @return Dataframe of parameter values with iterations in columns
+#' @returns Dataframe of parameter values with iterations in columns
 
 extract_param <- function(
   nimble_results,

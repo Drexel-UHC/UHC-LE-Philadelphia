@@ -16,13 +16,11 @@ path_onedrive <- here("Data - Cleansed")
 # Load data created in 01-Crosswalks
 load(file = here(path_onedrive, "phila_sf.Rdata"))
 load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
-load(file = here(path_onedrive, "years_cross.Rdata"))
 load(file = here(path_onedrive, "age_grp.Rdata"))
 load(file = here(path_onedrive, "phila_tracts_ages_sexes_years.Rdata"))
 
 # All tracts in Philly
 phila_tracts <- unique(phila_sf$GEOID)
-N_tracts <- length(phila_tracts)
 
 # Age limit for age at death
 age_limit <- 85
@@ -195,7 +193,7 @@ phila_deaths_df <- function(df) {
         floor(AGE_DEATH) < age_limit ~ floor(AGE_DEATH)
       )
     ) %>%
-    inner_join(age_grp)
+    inner_join(age_grp, by = "age")
 }
 
 # Philly deaths by tract x sex x age group

@@ -139,8 +139,8 @@ age_grps <- age_grp$age_grp %>% unique()
 # All tract/age combinations
 phila_tracts_ages <- expand.grid(phila_tracts, ages) %>%
   rename(GEOID = Var1, age = Var2) %>%
-  inner_join(age_grp) %>%
-  inner_join(phila_sf_cross) %>%
+  inner_join(age_grp, by = "age") %>%
+  inner_join(phila_sf_cross, by = "GEOID") %>%
   arrange(tract, age) %>%
   mutate(age = as.numeric(age))
 
@@ -151,8 +151,8 @@ years <- years_cross$years %>% unique()
 # Crosswalk of all ages x tracts x sexes x years
 phila_tracts_ages_sexes_years <- expand.grid(phila_tracts, ages, sexes, years) %>%
   rename(GEOID = Var1, age = Var2, sex = Var3, years = Var4) %>%
-  inner_join(age_grp) %>%
-  inner_join(phila_sf_cross) %>%
+  inner_join(age_grp, by = "age") %>%
+  inner_join(phila_sf_cross, by = "GEOID") %>%
   arrange(years, sex, tract, age) %>%
   mutate(age = as.numeric(age))
 
@@ -164,7 +164,7 @@ save(
 # Crosswalk of all age groups x tracts x sexes x years
 phila_tracts_age_grp_sexes_years <- expand.grid(phila_tracts, age_grps, sexes, years) %>%
   rename(GEOID = Var1, age_grp = Var2, sex = Var3, years = Var4) %>%
-  inner_join(phila_sf_cross) %>%
+  inner_join(phila_sf_cross, by = "GEOID") %>%
   arrange(years, sex, tract, age_grp) %>%
   mutate(age_grp = as.numeric(age_grp))
 

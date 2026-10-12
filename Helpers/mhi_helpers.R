@@ -5,19 +5,19 @@
 #' @param type Character string specifying the income grouping scheme:
 #'  `"decile"` (10 groups) or `"ventile"` (20 groups)
 #'
-#' @return Dataframe with mhi grouped into deciles or ventiles
+#' @returns Dataframe with mhi grouped into deciles or ventiles
 
 add_income_groups <- function(
-    mhi_df,
-    pop_df,
-    type = c("decile", "ventile")
+  mhi_df,
+  pop_df,
+  type = c("decile", "ventile")
 ) {
   type <- match.arg(type)
-  n_groups <- if_else(type == "decile", 10, 20)
+  n_groups <- if (type == "decile") 10 else 20
   name <- paste0(type, "_income")
-  
+
   mhi_df %>%
-    left_join(pop_df, by = c("GEOID", "years")) %>%             
+    left_join(pop_df, by = c("GEOID", "years")) %>%
     rename(total_pop = pop) %>%
     group_by(years) %>%
     mutate(
@@ -44,12 +44,12 @@ add_income_groups <- function(
 
 #' Compute population-weighted summaries by income group
 #'
-#' @param le_df Dataframe containing posterior samples of LE by income groups
+#' @param le_df Dataframe containing posterior samples of LE by income groups (output of `build_le_mhi()`)
 #' @param value Unquoted variable name to summarize
-#' @param pop_df Dataframe containing population
+#' @param pop_df Dataframe containing population estimates used for weighting
 #' @param type Character string specifying whether to use income deciles or ventiles
 #'
-#' @return Dataframe containing median and 95% credible interval of population-weighted mean LE by income group
+#' @returns Dataframe containing median and 95% credible interval of population-weighted mean LE by income group
 
 compute_income_summary <- function(
   le_df,
@@ -88,13 +88,13 @@ compute_income_summary <- function(
 
 #' Plot outcome by income rank
 #'
-#' @param df Dataframe containing outcome values by income grouping
+#' @param df Dataframe containing outcome values by income grouping (output of `compute_income_summary()`)
 #' @param yvar Unquoted variable name to display on the y-axis
 #' @param type Character string specifying whether to use income deciles or ventiles
-#' @param color_var Optional unquoted grouping variable used to color lines and points
+#' @param color_var Optional column name used to color lines and points
 #' @param add_smooth Logical indicating whether to add a linear trend line
 #'
-#' @return A ggplot object
+#' @returns A ggplot object
 
 plot_income_curve <- function(
   df,
@@ -163,12 +163,14 @@ plot_income_curve <- function(
 
 #' Build a life expectancy by mhi dataset
 #'
-#' @param df Dataframe containing life expectancy estimates
-#' @param income_df Dataframe containing median household income estimates
-#' @param value_col Unquoted name of variable that will be changed to NA if GEOID belongs to pre-specified group of census tracts
-#' @param is_change Logical indicating whetehr the input data represent change in life expectancy
+#' Requires `sex_years` and `set_lowpop_na()` in the global environment.
 #'
-#' @returns
+#' @param le_df Dataframe containing life expectancy estimates (output of `build_le_iter()` or `compute_le_change()`)
+#' @param mhi_df Dataframe containing median household income estimates (output of `add_income_groups()`)
+#' @param value_col Name of variable that will be changed to NA if GEOID belongs to pre-specified group of census tracts
+#' @param is_change Logical indicating whether the input data represent change in life expectancy
+#'
+#' @returns Dataframe of life expectancy with tract-level mhi
 
 build_le_mhi <- function(
   le_df,

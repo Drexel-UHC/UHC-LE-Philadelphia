@@ -10,12 +10,8 @@ library(diagis)
 library(sf)
 library(tmap)
 library(RColorBrewer)
-library(ggpubr)
 library(priceR)
-library(matrixStats)
 library(reldist)
-library(Hmisc)
-library(dineq)
 library(broom)
 library(data.table)
 library(future)
@@ -32,11 +28,11 @@ dir_name <- here("//files.drexel.edu/encrypted/SOPH/UHC/SchnakeMahl_PAVitalStat/
 quarto <- here("Quarto")
 
 # Load data created in 01-Crosswalks
-load(file = here(path_onedrive, "sex_years.RData"))
-load(file = here(path_onedrive, "phila_sf.RData"))
+load(file = here(path_onedrive, "sex_years.Rdata"))
+load(file = here(path_onedrive, "phila_sf.Rdata"))
 load(file = here(path_onedrive, "phila_sf_2020.Rdata"))
 load(file = here(path_onedrive, "low_pop_tracts.Rdata"))
-load(file = here(path_onedrive, "tract_ids.RData"))
+load(file = here(path_onedrive, "tract_ids.Rdata"))
 load(file = here(path_onedrive, "phila_tracts_ages_sexes_years.Rdata"))
 
 # All tracts in Philly
@@ -82,26 +78,110 @@ plot_theme <- function(base_size = 15) {
     )
 }
 
+# change hyphens to en dashes for figure labels
+en_dash <- function(x) {
+  gsub("(\\d{4})-(\\d{4})", "\\1\u2013\\2", x)
+}
+
+# Arrange ggplots with locants at the top-left corner of each one. Extra top
+# margin leaves room for the letter above the facet strips.
+label_panels <- function(plots, ncol, labels = paste0(LETTERS[seq_along(plots)], ")"), label_size = 14, ...) {
+  plots <- lapply(
+    plots,
+    function(p) p + theme(plot.margin = margin(t = 22, r = 5.5, b = 5.5, l = 5.5))
+  )
+
+  cowplot::plot_grid(
+    plotlist = plots,
+    ncol = ncol,
+    labels = labels,
+    label_size = label_size,
+    label_x = 0.01,
+    label_y = 0.99,
+    hjust = 0,
+    vjust = 1,
+    ...
+  )
+}
+
+# Save a tmap_arrange() figure as laid out, with locants drawn on top at the
+# top-left corner of each map
+save_tmap_locants <- function(
+  tm,
+  filename,
+  ncol,
+  nrow,
+  width = 7,
+  height = 7,
+  dpi = 600,
+  labels = paste0(LETTERS[seq_len(ncol * nrow)], ")")
+) {
+  if (grepl("\\.pdf$", filename)) {
+    cairo_pdf(filename, width = width, height = height)
+  } else {
+    png(filename, width = width, height = height, units = "in", res = dpi, bg = "white")
+  }
+
+  print(tm)
+
+  i <- seq_along(labels) - 1
+  grid::grid.text(
+    labels,
+    x = grid::unit((i %% ncol) / ncol, "npc") + grid::unit(3, "pt"),
+    y = grid::unit(1 - (i %/% ncol) / nrow, "npc") - grid::unit(3, "pt"),
+    just = c("left", "top"),
+    gp = grid::gpar(fontsize = 12, fontface = "bold")
+  )
+
+  invisible(dev.off())
+}
+
 
 # Dataframes for Maps -----------------------------------------------------
 
 
 # Load LE data calculated in 05-Models
 load_gc(here(path_onedrive, paste0("le_df_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_df_", date, ".Rdata")))
 
 # Dataframe life expectancy at birth by census tract x sex x years (with spatial structure for maps)
 le_birth <- le_df %>%
   filter(Age == 0) %>%
-  left_join(sex_years) %>%
-  full_join(phila_sf) %>%
+  left_join(sex_years, by = c("sex", "years")) %>%
+  full_join(phila_sf, by = "GEOID") %>%
   select(GEOID, Age, lci, med, uci, geometry, sex, years, sex_years, sex_years_lab) %>%
   ungroup() %>%
   set_lowpop_na(c("med", "lci", "uci")) %>%
-  inner_join(tract_ids) %>%
+  inner_join(
+    sf::st_drop_geometry(tract_ids),
+    by = "GEOID"
+  ) %>%
   arrange(sex_years, tract)
 
 save(le_birth,
   file = here("Quarto", "Data", paste0("le_birth_", date, ".Rdata"))
+)
+
+le_birth_change <- compute_le_change(
+  le_df = le_iter_df %>%
+    filter(Age == 0),
+  value = "le",
+  iteration = TRUE
+) %>%
+  group_by(GEOID, Age, sex) %>%
+  summarise(
+    lci = quantile(change, 0.025, na.rm = TRUE),
+    med = quantile(change, 0.50, na.rm = TRUE),
+    uci = quantile(change, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(sex) %>%
+  mutate(order = rank(med)) %>%
+  ungroup()
+
+save(
+  le_birth_change,
+  file = here(path_onedrive, paste0("le_birth_change_", date, ".Rdata"))
 )
 
 
@@ -114,7 +194,7 @@ load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 # Median/10th and 90th percentile of life expectancy across tracts
 le_summary <- le_birth %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes, by = c("GEOID", "sex", "years")) %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(
     le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
@@ -124,13 +204,10 @@ le_summary <- le_birth %>%
   )
 
 # Median/10th and 90th percentile of change in life expectancy across tracts
-le_change_summary <- le_birth %>%
-  rename(le = med) %>%
-  compute_le_change(
-    value = "le",
-    iteration = FALSE
-  ) %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes %>% filter(years == "2017-2019")) %>%
+le_change_summary <- le_birth_change %>%
+  rename(change = med) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes %>%
+    filter(years == "2017-2019"), by = c("GEOID", "sex")) %>%
   group_by(sex) %>%
   summarise(
     change_min = round(min(change, na.rm = TRUE), 2),
@@ -142,20 +219,20 @@ le_change_summary <- le_birth %>%
   )
 
 # % of Tracts that had a decrease in LE
-le_decrease <- le_birth %>%
-  rename(le = med) %>%
-  compute_le_change(
-    value = "le",
-    iteration = FALSE
+le_decrease <- le_birth_change %>%
+  filter(!GEOID %in% low_pop) %>%
+  inner_join(
+    phila_pop$pop_tract_sex_total_all_fixes %>%
+      filter(years == "2017-2019") %>%
+      select(GEOID, sex, pop),
+    by = c("GEOID", "sex")
   ) %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes %>% filter(years == "2017-2019")) %>%
-  mutate(decr = as.numeric(change < 0)) %>%
+  mutate(decr = as.numeric(med < 0)) %>%
   group_by(sex) %>%
   summarise(
-    pct_decr = weighted_mean(decr, w = pop, na.rm = TRUE),
+    pct_decr = round(weighted_mean(decr, w = pop, na.rm = TRUE) * 100, 2),
     .groups = "drop"
-  ) %>%
-  mutate(pct_decr = round(pct_decr * 100, 2))
+  )
 
 
 # MHI ---------------------------------------------------------------------
@@ -195,11 +272,8 @@ mhi_2022 <- mhi_raw %>%
 # Convert 2022 MHI to 2010 boundaries
 mhi_2022_to_2010 <- mhi_2022 %>%
   inner_join(geoid_crosswalk, by = c("GEOID" = "GEOID20")) %>%
-  # mutate(mhi_weighted = mhi * WEIGHT) %>%
-  # mutate(mhi_weighted = weighted.mean(mhi, WEIGHT, na.rm = TRUE)) %>%
   group_by(GEOID10) %>%
   summarise(
-    # mhi = sum(mhi_weighted, na.rm = TRUE) / sum(WEIGHT, na.rm = TRUE),
     mhi = weighted.mean(mhi, WEIGHT, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -338,7 +412,7 @@ save(
 # Load LE data calculated in 05-Models
 load_gc(here(path_onedrive, paste0("le_iter_df_", date, ".Rdata")))
 
-# Load LE data calculated in 06-Analysis
+# Load MHI deciles/ventiles data created above
 load_gc(here(path_onedrive, paste0("mhi_deciles_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("mhi_deciles_sensitivity_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("mhi_ventiles_", date, ".Rdata")))
@@ -431,15 +505,21 @@ save(
 # Mortality Rate Plots ---------------------------------------------------
 
 
-# Load mortality rate data created in 03-Mortality-Rates and 05-Models
+# Load mortality rate data created in 04-Mortality-Rates and 05-Models
 load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("thetas_med_ci_", date, ".Rdata")))
 
 # Plot estimated rates with credible intervals
 rates_plot_ribbon <- thetas_med_ci %>%
-  left_join(phila_death_rates$death_rates_age_tract) %>%
-  left_join(phila_death_rates$death_rates_age %>%
-    select(c("age", "sex", "years", "sex_years", "sex_years_lab", "theta_star"))) %>%
+  left_join(
+    phila_death_rates$death_rates_age_tract,
+    by = c("tract", "age", "sex_years", "GEOID", "sex", "years", "sex_years_lab")
+  ) %>%
+  left_join(
+    phila_death_rates$death_rates_age %>%
+      select(c("age", "sex", "years", "sex_years", "sex_years_lab", "theta_star")),
+    by = c("age", "sex_years", "sex", "years", "sex_years_lab")
+  ) %>%
   mutate(
     offset = med - theta_star,
     offset_lci = lci - theta_star,
@@ -470,7 +550,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
       geom_line(aes(y = theta_star), color = "red") +
       geom_hline(yintercept = 0) +
       geom_point(pch = 21, fill = NA, color = "black", aes(y = crude)) +
-      facet_wrap(~sex_years_lab) +
+      facet_wrap(~sex_years_lab, labeller = as_labeller(en_dash)) +
       labs(title = .y$GEOID, y = "Log Mortality Rate") +
       theme_bw()
     p$GEOID <- .y$GEOID
@@ -478,7 +558,7 @@ rates_plot_ribbon <- thetas_med_ci %>%
   })
 
 pdf(file = here(working_results, paste0("rates_plot_ribbon_", date, ".pdf")))
-rates_plot_ribbon
+walk(rates_plot_ribbon, print)
 dev.off()
 
 
@@ -492,7 +572,7 @@ load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
 
 # Median LE (with P10–P90)
 table2_med_le <- le_birth %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes, by = c("GEOID", "sex", "years")) %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(
     le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
@@ -567,7 +647,7 @@ write.csv(
 
 
 load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
-load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_birth_change_", date, ".Rdata")))
 
 # Ordering for points on plots
 t1_order <- le_birth %>%
@@ -584,7 +664,7 @@ le_plot <- le_birth %>%
     aes(
       x = med,
       y = reorder(med, order),
-      colour = years
+      color = en_dash(years)
     )
   ) +
   geom_point() +
@@ -608,25 +688,10 @@ le_plot <- le_birth %>%
     sec.axis = dup_axis(name = NULL),
     breaks = round(seq(25, 100, by = 5))
   ) +
-  labs(x = "LE at Birth (Years)", colour = "Years")
-
-le_birth_change <- le_iter_change_deciles %>%
-  filter(Age == 0) %>%
-  group_by(GEOID, Age, sex) %>%
-  summarise(
-    lci = quantile(change, 0.025, na.rm = TRUE),
-    med = quantile(change, 0.5, na.rm = TRUE),
-    uci = quantile(change, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  group_by(sex) %>%
-  mutate(order = rank(med)) %>%
-  ungroup()
-
-save(
-  le_birth_change,
-  file = here(path_onedrive, paste0("le_birth_change_", date, ".Rdata"))
-)
+  labs(
+    x = "LE at Birth (Years)",
+    color = "Years"
+  )
 
 # Change in LE
 change_plot <- le_birth_change %>%
@@ -662,31 +727,32 @@ change_plot <- le_birth_change %>%
     sec.axis = dup_axis(name = NULL),
     breaks = round(
       seq(
-        floor(min(le_birth_change$lci, na.rm = T) / 5) * 5,
-        ceiling(max(le_birth_change$uci, na.rm = T) / 5) * 5,
+        floor(min(le_birth_change$lci, na.rm = TRUE) / 5) * 5,
+        ceiling(max(le_birth_change$uci, na.rm = TRUE) / 5) * 5,
         by = 5
       )
     )
   ) +
-  labs(x = "Change in LE at Birth")
+  labs(x = "Change in LE at Birth (Years)")
 
-# Combine plots
-figure1 <- ggarrange(le_plot, change_plot, ncol = 1)
+figure1 <- label_panels(list(le_plot, change_plot), ncol = 1)
 
 ggsave(
   filename = here(main_text, "figure1.png"),
   plot = figure1,
-  width = 10,
-  height = 12,
-  dpi = 600
+  width = 7,
+  height = 8.4,
+  dpi = 600,
+  bg = "white"
 )
 
 ggsave(
   filename = here(main_text, "figure1.pdf"),
   plot = figure1,
-  width = 10,
-  height = 12,
-  dpi = 600
+  width = 7,
+  height = 8.4,
+  dpi = 600,
+  device = cairo_pdf
 )
 
 
@@ -733,14 +799,26 @@ for (i in unique(le_sf$sex_years_lab)) {
       fill.legend = tm_legend(title = "LE at Birth (Years)"),
       id = "GEOID"
     ) +
-    tm_title(i) +
+    tm_compass(
+      type = "arrow",
+      size = 1.5,
+      position = c("left", "top")
+    ) +
+    tm_scalebar(
+      breaks = c(0, 1, 2),
+      text.size = 0.7,
+      position = c("left", "top")
+    ) +
+    tm_title(en_dash(i)) +
+    tmap_options(component.autoscale = FALSE) +
     tm_layout(
       title.position = c("center", "top"),
-      title.size = 2,
+      title.size = 0.9,
       inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c("right", "bottom"),
-      legend.title.size = 1.4,
-      legend.text.size = 1.4
+      legend.title.size = 0.7,
+      legend.text.size = 0.7,
+      component.offset = c(inside = 0.00)
     )
 }
 
@@ -755,8 +833,8 @@ le_maps <- tmap_arrange(
 tmap_save(
   le_maps,
   filename = here(main_text, "figure2.png"),
-  width = 14,
-  height = 14,
+  width = 7,
+  height = 7,
   units = "in",
   dpi = 600
 )
@@ -764,10 +842,11 @@ tmap_save(
 tmap_save(
   le_maps,
   filename = here(main_text, "figure2.pdf"),
-  width = 14,
-  height = 14,
+  width = 7,
+  height = 7,
   units = "in",
-  dpi = 600
+  dpi = 600,
+  device = cairo_pdf
 )
 
 
@@ -779,8 +858,7 @@ load_gc(here(path_onedrive, paste0("le_iter_change_deciles_", date, ".Rdata")))
 
 # Convert le_birth_change dataframe to sf object
 le_change_sf <- le_birth_change %>%
-  inner_join(phila_sf) %>%
-  mutate(med = round(med, 2)) %>%
+  inner_join(phila_sf, by = "GEOID") %>%
   st_as_sf()
 
 save(
@@ -801,7 +879,7 @@ post_prob_sf <- le_iter_change_deciles %>%
     .groups = "drop"
   ) %>%
   mutate(prob_decr = round(prob_decr * 100, 2)) %>%
-  full_join(phila_sf) %>%
+  full_join(phila_sf, by = "GEOID") %>%
   select(GEOID, sex, prob_decr, geometry) %>%
   set_lowpop_na("prob_decr") %>%
   st_as_sf()
@@ -815,18 +893,26 @@ save(
 post_prob_maps_list <- list()
 
 # Number of breaks for legend
-n_breaks_le_change <- 5
+n_breaks_decline <- 4
 
 for (i in unique(le_change_sf$sex)) {
   # Filter LE change data
   data_i <- le_change_sf %>% filter(sex == i)
 
-  # Breaks for legend
-  breaks_le_change <- classIntervals(
-    na.omit(data_i$med),
-    n = n_breaks_le_change,
-    style = "jenks"
-  )$brks
+  # Jenks breaks on declines only
+  declines <- na.omit(data_i$med[data_i$med < 0])
+  breaks_decline <- classIntervals(declines, n = n_breaks_decline, style = "jenks")$brks
+
+  breaks_le_change <- c(
+    head(breaks_decline, -1),
+    0,
+    max(data_i$med, na.rm = TRUE)
+  )
+
+  cols_le_change <- c(
+    colorRampPalette(c("#FF0000", "#FFE5E5"))(n_breaks_decline),
+    "#92C5DE"
+  )
 
   # LE change map
   le_change_maps_list[[i]] <- tm_shape(data_i) +
@@ -835,23 +921,38 @@ for (i in unique(le_change_sf$sex)) {
       fill = "med",
       fill.scale = tm_scale_intervals(
         style = "fixed",
-        midpoint = 0,
-        values = colorRampPalette(c("red", "white", "green"))(n_breaks_le_change),
+        values = cols_le_change, # colorRampPalette(c("red", "white", "blue"))(n_breaks_le_change),
         breaks = breaks_le_change,
-        label.format = list(text.separator = "to"),
+        interval.closure = "left",
+        label.format = list(
+          text.separator = "to",
+          digits = 2
+        ),
         label.na = "NA"
       ),
       fill.legend = tm_legend(title = "Change in LE \nat Birth (Years)"),
       id = "GEOID"
     ) +
-    tm_title(i) +
+    tm_compass(
+      type = "arrow",
+      size = 1.5,
+      position = c("left", "top")
+    ) +
+    tm_scalebar(
+      breaks = c(0, 1, 2),
+      text.size = 0.7,
+      position = c("left", "top")
+    ) +
+    tm_title(en_dash(i)) +
+    tmap_options(component.autoscale = FALSE) +
     tm_layout(
       title.position = c("center", "top"),
-      title.size = 2,
+      title.size = 0.9,
       inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c("right", "bottom"),
-      legend.title.size = 1.4,
-      legend.text.size = 1.4
+      legend.title.size = 0.7,
+      legend.text.size = 0.7,
+      component.offset = c(inside = 0.00)
     )
 
   # Posterior probability data
@@ -866,51 +967,53 @@ for (i in unique(le_change_sf$sex)) {
         style = "fixed",
         breaks = c(0, 5, 10, 25, 75, 90, 95, 100),
         values = brewer.pal(7, "RdBu")[7:1],
-        label.format = list(text.separator = "to"),
+        label.format = list(text.separator = "to", interval.disjoint = FALSE),
         label.na = "NA"
       ),
       fill.legend = tm_legend(
-        title = "Post. Prob. of a \nDecr. in LE (%)",
-        ncol = 2
-      ), #
+        title = "P(change in\nLE < 0) (%)"
+      ),
       id = "GEOID"
     ) +
-    tm_title(i) +
+    tm_compass(
+      type = "arrow",
+      size = 1.5,
+      position = c("left", "top")
+    ) +
+    tm_scalebar(
+      breaks = c(0, 1, 2),
+      text.size = 0.7,
+      position = c("left", "top")
+    ) +
+    tm_title(en_dash(i)) +
+    tmap_options(component.autoscale = FALSE) +
     tm_layout(
       title.position = c("center", "top"),
-      title.size = 2,
-      inner.margins = c(0.1, 0.05, 0.05, 0.15),
+      title.size = 0.9,
+      inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c("right", "bottom"),
-      legend.title.size = 1.4,
-      legend.text.size = 1.4
+      legend.title.size = 0.7,
+      legend.text.size = 0.7,
+      component.offset = c(inside = 0.00)
     )
 }
 
-# Combine maps
 le_change_post_prob_maps <- tmap_arrange(
   c(le_change_maps_list, post_prob_maps_list)[c(1, 3, 2, 4)],
   ncol = 2,
   nrow = 2,
-  outer.margins = 0.02
+  outer.margins = c(0.02, 0.02, 0.07, 0.02)
 )
 
-tmap_save(
-  le_change_post_prob_maps,
-  filename = here(main_text, "figure3.png"),
-  width = 14,
-  height = 14,
-  units = "in",
-  dpi = 600
-)
-
-tmap_save(
-  le_change_post_prob_maps,
-  filename = here(main_text, "figure3.pdf"),
-  width = 14,
-  height = 14,
-  units = "in",
-  dpi = 600
-)
+for (ext in c("png", "pdf")) {
+  save_tmap_locants(
+    le_change_post_prob_maps,
+    here(main_text, paste0("figure3.", ext)),
+    ncol = 2,
+    nrow = 2,
+    labels = c("A)", "B)", "A)", "B)")
+  )
+}
 
 
 # Figure 4 - LE/Change in LE by MHI Decile --------------------------------
@@ -948,15 +1051,15 @@ save(
 
 figure4_le <- le_by_decile %>%
   filter(Age == 0) %>%
-  mutate(Years = years) %>%
+  mutate(Years = en_dash(years)) %>%
   plot_income_curve(
     yvar = med,
     type = "decile",
     color_var = "Years"
   ) +
   scale_x_continuous(
-    limits = c(-0.2, 11),
-    breaks = seq(0, 10, 2)
+    limits = c(0.5, 10.5),
+    breaks = 1:10
   ) +
   facet_wrap(~Sex) +
   labs(
@@ -977,8 +1080,8 @@ figure4_change <- le_change_by_decile %>%
   ) +
   guides(color = NULL) +
   scale_x_continuous(
-    limits = c(-0.2, 11),
-    breaks = seq(0, 10, 2)
+    limits = c(0.5, 10.5),
+    breaks = 1:10
   ) +
   facet_wrap(~Sex) +
   labs(
@@ -990,104 +1093,103 @@ figure4_change <- le_change_by_decile %>%
     strip.background = element_blank()
   )
 
-# Figure 4
-figure4 <- ggarrange(
-  figure4_le,
-  figure4_change,
+figure4 <- label_panels(
+  list(figure4_le, figure4_change),
   ncol = 1,
-  heights = c(1, 0.85)
+  rel_heights = c(1, 0.85)
 )
 
 ggsave(
   here(main_text, "figure4.png"),
   figure4,
-  width = 10,
-  height = 11,
-  dpi = 600
+  width = 7,
+  height = 7.7,
+  dpi = 600,
+  bg = "white"
 )
 
 ggsave(
   here(main_text, "figure4.pdf"),
   figure4,
-  width = 10,
-  height = 11,
-  dpi = 600
+  width = 7,
+  height = 7.7,
+  dpi = 600,
+  device = cairo_pdf
 )
 
 
-# Appendix S2 - Population Distribution ----------------------------------
+# Figure S1 - Population Distribution ----------------------------------
 
 
 # Load data
 load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 # Max population
-max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE)/1000
+max_pop_total <- max(phila_pop$pop_tract_sex_total_all_fixes$pop, na.rm = TRUE) / 1000
 
 # Distribution of total tract population
 pop_tract_hist <- phila_pop$pop_tract_sex_total_all_fixes %>%
-  inner_join(sex_years) %>%
+  inner_join(sex_years, by = c("years", "sex")) %>%
   ggplot(aes(x = pop / 1000)) +
   geom_histogram(
     bins = 30,
-    colour = "black",
+    color = "black",
     fill = "lightblue"
   ) +
   labs(
     x = "Population (thousands)",
     y = "Count"
   ) +
-  facet_wrap(~sex_years_lab) +
+  facet_wrap(~sex_years_lab, labeller = as_labeller(en_dash)) +
   scale_x_continuous(
     breaks = seq(2, max_pop_total, by = 2)
-  ) +
-  plot_theme(20)
-
-ggsave(
-  filename = here(appendix, "S2a.png"),
-  plot = pop_tract_hist,
-  width = 10,
-  height = 10,
-  dpi = 600
-)
+  )
 
 # Distribution of single-age tract population
 pop_tract_age_hist <- phila_pop$pop_age_all_fixes %>%
-  inner_join(sex_years) %>%
+  inner_join(sex_years, by = c("years", "sex")) %>%
   ggplot(aes(x = pop)) +
   geom_histogram(
     bins = 30,
-    colour = "black",
+    color = "black",
     fill = "lightblue"
   ) +
   labs(
     x = "Population",
     y = "Count"
   ) +
-  facet_wrap(~sex_years_lab) +
+  facet_wrap(~sex_years_lab, labeller = as_labeller(en_dash)) +
   scale_x_continuous(
     limits = c(0, 300),
     breaks = seq(0, 300, by = 50)
-  ) +
-  plot_theme(20)
+  )
+
+fig_s1 <- label_panels(
+  list(pop_tract_hist + plot_theme(10), pop_tract_age_hist + plot_theme(10)),
+  ncol = 1,
+  label_size = 12,
+  align = "v",
+  axis = "lr"
+)
 
 ggsave(
-  filename = here(appendix, "S2b.png"),
-  plot = pop_tract_age_hist,
-  width = 10,
-  height = 10,
-  dpi = 600
+  filename = here(appendix, "figureS1.png"),
+  plot = fig_s1,
+  width = 6.5,
+  height = 7,
+  dpi = 300,
+  bg = "white"
 )
 
 
-# Appendix S4 - Demographics of Vital Statistics and ACS Data -------------
+# Table S2 - Demographics of Vital Statistics and ACS Data -------------
 
 
 # Load mortality data created in 02-Deaths
 load_gc(here(dir_name, "Philly LE", paste0("phila_deaths_", date, ".Rdata")))
 load_gc(here(dir_name, "Philly LE", paste0("phila_death_counts_", date, ".Rdata")))
 
-# Summary table for age at death in Philadelphia for Appendix S4
+# Summary table for age at death in Philadelphia for Table S2
 phila_age_at_death_summary <- phila_deaths_nolow %>%
   group_by(years) %>%
   summarise(
@@ -1125,14 +1227,14 @@ phila_age_at_death_summary <- phila_deaths_nolow %>%
   ) %>%
   rename("Measure" = sex) %>%
   mutate(Measure = factor(Measure,
-                          levels = c(
-                            "Average age at death (SD)",
-                            "  Total",
-                            "  Sex",
-                            "    Men",
-                            "    Women",
-                            "    Unknown"
-                          )
+    levels = c(
+      "Average age at death (SD)",
+      "  Total",
+      "  Sex",
+      "    Men",
+      "    Women",
+      "    Unknown"
+    )
   )) %>%
   arrange(Measure)
 
@@ -1190,18 +1292,18 @@ phila_death_count_summary_sex <- phila_death_count_nolow_unknown %>%
   ) %>%
   rename("Measure" = sex) %>%
   mutate(Measure = factor(Measure,
-                          levels = c(
-                            "Number of deaths (%)",
-                            "  Total",
-                            "  Sex",
-                            "    Men",
-                            "    Women",
-                            "    Unknown"
-                          )
+    levels = c(
+      "Number of deaths (%)",
+      "  Total",
+      "  Sex",
+      "    Men",
+      "    Women",
+      "    Unknown"
+    )
   )) %>%
   arrange(Measure)
 
-# Summary table of race-ethnicity of Philly deaths for Table 1
+# Summary table of race-ethnicity of Philly deaths for Table S2
 phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
   filter(!is.na(age)) %>%
   group_by(years, racehisp) %>%
@@ -1232,11 +1334,11 @@ phila_death_count_summary_racehisp <- phila_deaths_nolow_modified %>%
   rename("Measure" = racehisp) %>%
   bind_rows(c(Measure = "  Racial-ethnic group", "2017-2019" = "", "2020-2022" = "")) %>%
   mutate(Measure = factor(Measure,
-                          levels = c(
-                            "  Racial-ethnic group", "    Hispanic", "    Non-Hispanic American Indian, Alaska Native",
-                            "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
-                            "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"
-                          )
+    levels = c(
+      "  Racial-ethnic group", "    Hispanic", "    Non-Hispanic American Indian, Alaska Native",
+      "    Non-Hispanic Asian American Pacific Islander", "    Non-Hispanic Black",
+      "    Non-Hispanic White", "    Non-Hispanic Other", "    Unknown"
+    )
   )) %>%
   arrange(Measure)
 
@@ -1246,13 +1348,13 @@ load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")
 
 # Get average and sd of mhi for Philadelphia
 weighted_mhi_phila <- mhi_sensitivity_inflation %>%
-  inner_join(phila_pop$pop_total_all_fixes) %>%
+  inner_join(phila_pop$pop_total_all_fixes, by = c("GEOID", "years")) %>%
   group_by(years) %>%
   summarise(
     mean = round(mean(mhi, na.rm = TRUE), 2),
-    wtd.mean = round(weighted_mean(mhi, w = pop, na.rm = T), 2),
+    wtd.mean = round(weighted_mean(mhi, w = pop, na.rm = TRUE), 2),
     sd = round(sd(mhi, na.rm = TRUE), 2),
-    wtd.sd = round(sqrt(weighted_var(mhi, w = pop, na.rm = T)), 2),
+    wtd.sd = round(sqrt(weighted_var(mhi, w = pop, na.rm = TRUE)), 2),
     .groups = "drop"
   ) %>%
   mutate(
@@ -1270,7 +1372,6 @@ weighted_mhi_phila <- mhi_sensitivity_inflation %>%
   mutate("Measure" = "Population-weighted MHI (SD)") %>%
   relocate(Measure)
 
-# Appendix S6
 appendix_mort_summary <- bind_rows(
   phila_age_at_death_summary,
   phila_death_count_summary_sex,
@@ -1280,12 +1381,12 @@ appendix_mort_summary <- bind_rows(
 
 write.csv(
   appendix_mort_summary,
-  file = here(appendix, "S4.csv"),
+  file = here(appendix, "tableS2.csv"),
   row.names = FALSE
 )
 
 
-# Appendix S5 - Table 2 with Ventiles ------------------------------------
+# Table S3 - Table 2 with Ventiles ------------------------------------
 
 
 load_gc(here("Quarto", "Data", paste0("le_birth_", date, ".Rdata")))
@@ -1308,7 +1409,7 @@ income_disp_vent <- income_disparities(
 
 # Median LE (with P05–P95)
 table2_med_le_vent <- le_birth %>%
-  inner_join(phila_pop$pop_tract_sex_total_all_fixes) %>%
+  inner_join(phila_pop$pop_tract_sex_total_all_fixes, by = c("GEOID", "sex", "years")) %>%
   group_by(sex, years, sex_years, sex_years_lab) %>%
   summarise(
     le_med = round(reldist::wtd.quantile(med, q = 0.5, weight = pop, na.rm = TRUE), 2),
@@ -1355,7 +1456,6 @@ table2_income_disp_vent <- income_disp_vent %>%
   ) %>%
   select(-Age)
 
-# Combine tables
 table2_vent <- bind_rows(
   table2_med_le_vent,
   table2_total_disp_vent,
@@ -1364,12 +1464,12 @@ table2_vent <- bind_rows(
 
 write.csv(
   table2_vent,
-  here(appendix, "S5.csv"),
+  here(appendix, "tableS3.csv"),
   row.names = FALSE
 )
 
 
-# Appendix S6 - Population adjustment sensitivity analysis ---------------------
+# Figure S2 - Population adjustment sensitivity analysis ---------------------
 
 
 load_gc(here(path_onedrive, paste0("le_df_no_pop_adjust_", date, ".Rdata")))
@@ -1381,7 +1481,7 @@ le_df_comp <- le_df %>%
     le = med.x,
     le_no_pop_adjust = med.y
   ) %>%
-  inner_join(sex_years) %>%
+  inner_join(sex_years, by = c("sex", "years")) %>%
   filter(Age == 0) %>%
   mutate(diff = le_no_pop_adjust - le)
 
@@ -1398,24 +1498,24 @@ le_comp <- le_df_comp %>%
     intercept = 0,
     col = "red"
   ) +
-  facet_wrap(~sex_years_lab) +
-  plot_theme() +
+  facet_wrap(~sex_years_lab, labeller = as_labeller(en_dash)) +
+  plot_theme(10) +
   labs(
     x = "Median LE with Population Adjustments",
     y = "Median LE without Population Adjustments"
   )
 
 ggsave(
-  filename = here(appendix, "S6.png"),
+  filename = here(appendix, "figureS2.png"),
   plot = le_comp,
-  width = 10,
-  height = 10,
+  width = 6.5,
+  height = 6.5,
   units = "in",
-  dpi = 600
+  dpi = 300
 )
 
 
-# Appendix S7 - Abridged Lifetables  -------------------------------------------
+# Figure S3 - Abridged Life Tables  -------------------------------------------
 
 
 load_gc(here(path_onedrive, paste0("lambdas_", date, ".Rdata")))
@@ -1431,8 +1531,8 @@ iter_cols <- grep("^iter_", names(lambdas), value = TRUE)
 
 lambdas_abridged <- as.data.table(
   n %>%
-    inner_join(age_grp) %>%
-    inner_join(lambdas) %>%
+    inner_join(age_grp, by = "age") %>%
+    inner_join(lambdas, by = c("tract", "GEOID", "sex", "years", "age")) %>%
     filter(!(GEOID %in% low_pop))
 )[
   ,
@@ -1481,6 +1581,8 @@ le_abridged_df <- summarise_le_ci(
   obj_name = "le_abridged_df"
 )
 
+load_gc(here(path_onedrive, paste0("le_abridged_df_", date, ".Rdata")))
+
 le_birth_comp <- le_abridged_df %>%
   filter(Age == 0) %>%
   rename(
@@ -1488,8 +1590,8 @@ le_birth_comp <- le_abridged_df %>%
     lci_abr = lci,
     uci_abr = uci
   ) %>%
-  inner_join(sex_years) %>%
-  inner_join(le_birth) %>%
+  inner_join(sex_years, by = c("sex", "years")) %>%
+  inner_join(le_birth, by = c("GEOID", "Age", "sex", "years", "sex_years", "sex_years_lab")) %>%
   ggplot(
     aes(
       x = med,
@@ -1502,23 +1604,23 @@ le_birth_comp <- le_abridged_df %>%
     intercept = 0,
     col = "red"
   ) +
-  facet_wrap(~sex_years_lab) +
+  facet_wrap(~sex_years_lab, labeller = as_labeller(en_dash)) +
   labs(
-    x = "LE at Birth (Full Lifetable)",
-    y = "LE at Birth (Abridged Lifetable)"
+    x = "LE at Birth (Single-Year Life Table)",
+    y = "LE at Birth (Abridged Life Table)"
   ) +
-  plot_theme()
+  plot_theme(10)
 
 ggsave(
-  filename = here(appendix, "S7.png"),
+  filename = here(appendix, "figureS3.png"),
   plot = le_birth_comp,
-  width = 10,
-  height = 10,
-  dpi = 600
+  width = 6.5,
+  height = 6.5,
+  dpi = 300
 )
 
 
-# Appendix S8 - MHI Maps --------------------------------------------------
+# Figure S4 - MHI Maps --------------------------------------------------
 
 
 # Load Data
@@ -1526,7 +1628,7 @@ load_gc(here(path_onedrive, paste0("mhi_sensitivity_inflation_", date, ".Rdata")
 
 # Convert dataframe to sf object
 mhi_sf <- mhi_sensitivity_inflation %>%
-  inner_join(phila_sf) %>%
+  inner_join(phila_sf, by = "GEOID") %>%
   st_as_sf()
 
 # Initialize list to store maps
@@ -1561,15 +1663,26 @@ for (i in unique(mhi_sf$years)) {
       fill.legend = tm_legend(title = "MHI ($)"),
       id = "GEOID"
     ) +
-    tm_title(i) +
-    tmap_options(component.autoscale = TRUE) +
+    tm_compass(
+      type = "arrow",
+      size = 1.5,
+      position = c("left", "top")
+    ) +
+    tm_scalebar(
+      breaks = c(0, 1, 2),
+      text.size = 0.7,
+      position = c("left", "top")
+    ) +
+    tm_title(en_dash(i)) +
+    tmap_options(component.autoscale = FALSE) +
     tm_layout(
       title.position = c("center", "top"),
-      title.size = 2,
-      inner.margins = c(0.02, 0.02, 0.02, 0.02),
+      title.size = 1.25,
+      inner.margins = c(0.05, 0.05, 0.05, 0.05),
       legend.position = c("right", "bottom"),
-      legend.title.size = 1.5,
-      legend.text.size = 1.5
+      legend.title.size = 0.65,
+      legend.text.size = 0.65,
+      component.offset = c(inside = 0.00)
     )
 }
 
@@ -1577,21 +1690,21 @@ for (i in unique(mhi_sf$years)) {
 mhi_maps <- tmap_arrange(
   mhi_maps_list,
   ncol = 2,
-  outer.margins = 0.02,
+  outer.margins = 0.01,
   widths = c(0.5, 0.5)
 )
 
 tmap_save(
   mhi_maps,
-  filename = here(appendix, "S8.png"),
-  width = 14,
-  height = 8,
+  filename = here(appendix, "figureS4.png"),
+  width = 6.5,
+  height = 3.75,
   units = "in",
-  dpi = 600
+  dpi = 300
 )
 
 
-# Appendix S9 - LE Distribution by Decile ---------------------------------
+# Figure S5 - LE Distribution by Decile ---------------------------------
 
 
 # Load data
@@ -1606,9 +1719,8 @@ le_by_geoid_decile <- le_iter_deciles %>%
     .groups = "drop"
   )
 
-# Plots of LE by MHI decile with SII - main analysis
 le_by_decile_boxplots <- le_by_geoid_decile %>%
-  mutate(Years = years) %>%
+  mutate(Years = en_dash(years)) %>%
   ggplot(aes(
     x = decile_income,
     y = le
@@ -1627,32 +1739,33 @@ le_by_decile_boxplots <- le_by_geoid_decile %>%
   ) +
   guides(col = NULL) +
   scale_x_continuous(
-    limits = c(-0.2, 11),
-    breaks = seq(0, 10, by = 2)
+    limits = c(0.5, 10.5),
+    breaks = 1:10
   ) +
-  plot_theme() +
+  plot_theme(10) +
   theme(
     strip.background = element_blank()
   ) +
   facet_wrap(~sex)
 
 ggsave(
-  filename = here(appendix, "S9.png"),
+  filename = here(appendix, "figureS5.png"),
   plot = le_by_decile_boxplots,
   device = "png",
-  width = 7,
-  height = 4,
+  width = 6.5,
+  height = 3.75,
   units = "in",
-  dpi = 600
+  dpi = 300
 )
 
 
-# Appendix S10 - LE/Change in LE by MHI Decile (Sensitivity) ---------------
+# Figure S6 - LE/Change in LE by MHI Decile (Sensitivity) ---------------
 
 
 # Load time-varying MHI data
 load_gc(here(path_onedrive, paste0("le_iter_deciles_mhi_sensitivity_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("le_iter_change_deciles_mhi_sensitivity_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
 
 le_by_decile_mhi_sensitivity <- compute_income_summary(
   le_df = le_iter_deciles_mhi_sensitivity,
@@ -1672,66 +1785,77 @@ le_change_by_decile_mhi_sensitivity <- compute_income_summary(
 # Plot LE by time-varying MHI
 le_decile_plot_mhi_sensitivity <- le_by_decile_mhi_sensitivity %>%
   filter(Age == 0, !is.na(decile_income)) %>%
-  mutate(Years = years) %>%
+  mutate(Years = en_dash(years)) %>%
   plot_income_curve(
     yvar = med,
     type = "decile",
     color_var = "Years",
     add_smooth = TRUE
   ) +
-  scale_x_continuous(limits = c(-0.2, 11), breaks = seq(0, 10, 2)) +
+  scale_x_continuous(
+    limits = c(0.5, 10.5),
+    breaks = 1:10
+  ) +
   facet_wrap(~Sex) +
   labs(
     x = "Decile of Median Household Income",
     y = "LE at Birth (Years)"
   ) +
-  plot_theme() +
+  plot_theme(10) +
   theme(
     strip.background = element_blank()
   )
 
 # Plot change in LE by time-varying MHI
 le_change_decile_plot_mhi_sensitivity <- le_change_by_decile_mhi_sensitivity %>%
-  filter(Age == 0, !is.na(decile_income)) %>%
-  mutate(Years = years) %>%
+  filter(
+    Age == 0,
+    !is.na(decile_income)
+  ) %>%
+  mutate(Years = en_dash(years)) %>%
   plot_income_curve(
     yvar = med,
     color_var = "Years",
     add_smooth = FALSE
   ) +
-  scale_x_continuous(limits = c(-0.2, 11), breaks = seq(0, 10, 2)) +
+  scale_x_continuous(
+    limits = c(0.5, 10.5),
+    breaks = 1:10
+  ) +
   facet_wrap(~Sex) +
   labs(
     x = "Decile of Median Household Income",
-    y = "Change in LE at Birth (Years)"
+    y = "Change in LE at Birth (Years)",
+    color = "MHI Period"
   ) +
-  plot_theme() +
+  plot_theme(10) +
   theme(strip.background = element_blank())
 
 # Combine plots
-mhi_sensitivity_plot <- ggarrange(
-  le_decile_plot_mhi_sensitivity,
-  le_change_decile_plot_mhi_sensitivity,
+mhi_sensitivity_plot <- label_panels(
+  list(le_decile_plot_mhi_sensitivity, le_change_decile_plot_mhi_sensitivity),
   ncol = 1,
-  heights = c(1, 0.85)
+  label_size = 12
 )
 
 ggsave(
-  here(appendix, "S10.png"),
+  here(appendix, "figureS6.png"),
   mhi_sensitivity_plot,
-  width = 10,
-  height = 11,
+  width = 6.5,
+  height = 7,
   units = "in",
-  dpi = 600
+  dpi = 300,
+  bg = "white"
 )
 
 
-# Appendix S11 Figure 4 with Ventiles --------------------------------
+# Figure S7 - Figure 4 with Ventiles --------------------------------
 
 
 # Load data
 load_gc(here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("phila_pop_", date, ".Rdata")))
+load_gc(here(path_onedrive, paste0("le_iter_ventiles_", date, ".Rdata")))
 load_gc(here(path_onedrive, paste0("le_iter_change_ventiles_", date, ".Rdata")))
 
 # LE by ventile
@@ -1754,19 +1878,23 @@ le_change_by_ventile <- compute_income_summary(
 # Plot LE by ventile
 appendix_le_ventile <- le_by_ventile %>%
   filter(Age == 0) %>%
-  mutate(Years = years) %>%
+  mutate(Years = en_dash(years)) %>%
   plot_income_curve(
     yvar = med,
     type = "ventile",
     color_var = "Years"
   ) +
-  scale_x_continuous(limits = c(-0.2, 21), breaks = seq(0, 20, 2)) +
+  scale_x_continuous(
+    limits = c(0.5, 20.5),
+    breaks = c(1, 5, 10, 15, 20),
+    minor_breaks = 1:20
+  ) +
   facet_wrap(~Sex) +
   labs(
     x = "Ventile of Median Household Income",
     y = "LE at Birth (Years)"
   ) +
-  plot_theme() +
+  plot_theme(10) +
   theme(
     strip.background = element_blank()
   )
@@ -1780,29 +1908,34 @@ appendix_change_ventile <- le_change_by_ventile %>%
     add_smooth = FALSE
   ) +
   guides(color = NULL) +
-  scale_x_continuous(limits = c(-0.2, 21), breaks = seq(0, 20, 2)) +
+  scale_x_continuous(
+    limits = c(0.5, 20.5),
+    breaks = c(1, 5, 10, 15, 20),
+    minor_breaks = 1:20
+  ) +
   facet_wrap(~Sex) +
   labs(
     x = "Ventile of Median Household Income",
     y = "Change in LE at Birth (Years)"
   ) +
-  plot_theme() +
+  plot_theme(10) +
   theme(
     strip.background = element_blank()
   )
 
 # Combine plots
-appendix_ventiles <- ggarrange(
-  appendix_le_ventile,
-  appendix_change_ventile,
+appendix_ventiles <- label_panels(
+  list(appendix_le_ventile, appendix_change_ventile),
   ncol = 1,
-  heights = c(1, 0.85)
+  label_size = 12,
+  rel_heights = c(1, 0.85)
 )
 
 ggsave(
-  here(appendix, "S11.png"),
+  here(appendix, "figureS7.png"),
   appendix_ventiles,
-  width = 10,
-  height = 11,
-  dpi = 600
+  width = 6.5,
+  height = 7,
+  dpi = 300,
+  bg = "white"
 )

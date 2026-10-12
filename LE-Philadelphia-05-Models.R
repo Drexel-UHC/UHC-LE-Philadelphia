@@ -26,7 +26,7 @@ date <- "20260716"
 # Load data created in 01-Crosswalks
 load(file = here(path_onedrive, "phila_sf.Rdata"))
 load(file = here(path_onedrive, "sex_years.Rdata"))
-load(file = here(path_onedrive, "tract_ids.RData"))
+load(file = here(path_onedrive, "tract_ids.Rdata"))
 
 # Load data created in 04-Mortality-Rates
 load(file = here(dir_name, "Philly LE", paste0("phila_death_rates_", date, ".Rdata")))
@@ -140,7 +140,7 @@ save(
 # Model Convergence -------------------------------------------------------
 
 
-# Load nimble results and lambdas
+# Load nimble results
 load(file = here(path_onedrive, paste0("nimble_results_", date, ".Rdata")))
 
 # Extract intercepts (beta0s)
@@ -190,7 +190,7 @@ pdf(
 )
 
 make_traceplots(
-  betaij %>% 
+  betaij %>%
     filter(tract %in% sample_tracts),
   group_vars = c("GEOID", "knot"),
   value_lab = expression(beta[spat])
@@ -258,7 +258,7 @@ dev.off()
 # Spatial variance ESS
 tau_ess <- compute_ess(tau)
 
-# Extract nonspatial precision parameters
+# Extract nonspatial variance parameters
 tauns <- extract_param(
   nimble_results,
   param = "tauns",
@@ -296,7 +296,7 @@ le_nimble <- run_lt_parallel(
   save_path = here(path_onedrive, paste0("le_nimble_", date, ".Rdata")),
   obj_name = "le_nimble"
 )
-# Main lifetable calculations took 5.63 hours to run.
+# Main life table calculations took 5.63 hours to run.
 
 load(file = here(path_onedrive, paste0("lambdas_no_pop_adjust_", date, ".Rdata")))
 le_nimble_no_pop_adjust <- run_lt_parallel(
@@ -305,7 +305,7 @@ le_nimble_no_pop_adjust <- run_lt_parallel(
   save_path = here(path_onedrive, paste0("le_nimble_no_pop_adjust_", date, ".Rdata")),
   obj_name = "le_nimble_no_pop_adjust"
 )
-# No pop adjust lifetable calculations took 5.38 hours to run.
+# No pop adjust life table calculations took 5.38 hours to run.
 
 le_iter_df <- build_le_iter(
   le_list = le_nimble,

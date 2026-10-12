@@ -1,8 +1,9 @@
 #' Compute life tables from posterior lambda samples
 #'
-#' @param df Wide-format data frame for a single sex_years group
-#' @param type Character input for either single-year or abridged lifetable
-#' @return data.table with GEOID, sex_years, Age, ex, iteration
+#' @param df Dataframe of posterior mortality rates with iterations in columns for a single sex_years group (subset of the output of `extract_param()`)
+#' @param type Either 'single' for single-year life tables (main analysis) or 'abridged' for age-group life tables
+#'
+#' @returns data.table with GEOID, sex_years, Age, ex, iteration
 
 compute_lt <- function(
   df,
@@ -85,13 +86,14 @@ compute_lt <- function(
 
 #' Run life table calculations in parallel across sex_years groups
 #'
-#' @param lambdas_df Wide-format tibble
+#' @param lambdas_df Dataframe of posterior mortality rates with iterations in columns (output of `extract_param()` with `param = "lambda"`)
 #' @param label Character label for runtime message
+#' @param type Either 'single' for single-year life tables (main analysis) or 'abridged' for age-group life tables
 #' @param workers Number of workers
-#' @param save_path Optional save location
-#' @param obj_name Character input for object name in global environment
+#' @param save_path Optional file path to save the output (not saved if `NULL`)
+#' @param obj_name Name of the object stored in the saved .Rdata file
 #'
-#' @return Named list of data.tables
+#' @returns Named list of data.tables
 
 run_lt_parallel <- function(
   lambdas_df,
@@ -128,7 +130,7 @@ run_lt_parallel <- function(
   names(results) <- names(lambdas_split)
 
   elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "hours"))
-  cat(sprintf("%s lifetable calculations took %.2f hours to run.\n", label, elapsed))
+  cat(sprintf("%s life table calculations took %.2f hours to run.\n", label, elapsed))
 
   if (!is.null(save_path)) {
     tmp_env <- new.env()
@@ -140,14 +142,14 @@ run_lt_parallel <- function(
   results
 }
 
-#' Build dataframe with lifetable results
+#' Build dataframe with life table results
 #'
-#' @param le_list Named list of data.tables
+#' @param le_list Named list of data.tables (output of `run_lt_parallel()`)
 #' @param sex_years_df Dataframe crosswalking sex and years
-#' @param save_path Optional save location
-#' @param obj_name Character input for object name in global environment
+#' @param save_path Optional file path to save the output (not saved if `NULL`)
+#' @param obj_name Name of the object stored in the saved .Rdata file
 #'
-#' @return Dataframe of life expectancy
+#' @returns Dataframe of iteration-level life expectancy estimates for Ages 0, 25, and 65
 
 build_le_iter <- function(
   le_list,
@@ -170,6 +172,14 @@ build_le_iter <- function(
 
   return(le_iter_df)
 }
+
+#' Summarize iteration-level life expectancy results
+#'
+#' @param df Dataframe of iteration-level life expectancy estimates (output of `build_le_iter()`)
+#' @param save_path Optional file path to save the output (not saved if `NULL`)
+#' @param obj_name Name of the object stored in the saved .Rdata file
+#'
+#' @returns Dataframe of summarised life expectancy results (medians and 95% CrIs)
 
 summarise_le_ci <- function(
   df,
